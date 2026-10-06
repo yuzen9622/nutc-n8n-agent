@@ -1,7 +1,8 @@
 import {readFileSync,readdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
+const parseJson=(text)=>{try{return JSON.parse(text);}catch(e){throw new Error(`Invalid JSON: ${e.message}`);}};
 const files=readdirSync('workflows').filter(x=>/^WF-/.test(x));assert.equal(files.length,7);
-const workflows=files.map(f=>JSON.parse(readFileSync(`workflows/${f}`)));const ids=new Set(workflows.map(w=>w.id));
+const workflows=files.map(f=>parseJson(readFileSync(`workflows/${f}`,'utf8')));const ids=new Set(workflows.map(w=>w.id));
 for(const w of workflows) {
  const names=new Set(w.nodes.map(n=>n.name));assert.equal(names.size,w.nodes.length);
  for(const [source,ports]of Object.entries(w.connections)){assert(names.has(source));for(const output of ports.main)for(const target of output)assert(names.has(target.node),`dangling ${target.node}`);}
@@ -17,11 +18,11 @@ for(const f of ['SDD.md','WORKFLOWS.md','ROADMAP.md','RAG.md']) {
 }
 console.log('7 workflow graphs, references, fallback switches, layer boundaries and Phase 0 document links passed.');
 const nativeFiles=readdirSync('workflows/agent').filter(f=>f.endsWith('.json'));
-const native=nativeFiles.map(f=>JSON.parse(readFileSync(`workflows/agent/${f}`)));
+const native=nativeFiles.map(f=>parseJson(readFileSync(`workflows/agent/${f}`,'utf8')));
 const nativeIds=new Set(native.map(w=>w.id));
 for(const w of native){const names=new Set(w.nodes.map(n=>n.name));for(const [source,ports]of Object.entries(w.connections)){assert(names.has(source));for(const outputs of Object.values(ports))for(const targets of outputs)for(const target of targets)assert(names.has(target.node));}for(const n of w.nodes)if(n.type.endsWith('.toolWorkflow'))assert(nativeIds.has(n.parameters.workflowId.value));}
 const main=native.find(w=>w.id==='campusNativeAgentV2');assert(main.nodes.some(n=>n.type==='@n8n/n8n-nodes-langchain.agent'));
-assert.equal(Object.values(main.connections).filter(p=>p.ai_tool).length,5);assert.equal(Object.values(main.connections).filter(p=>p.ai_languageModel).length,1);
+assert.equal(Object.values(main.connections).filter(p=>p.ai_tool).length,8);assert.equal(Object.values(main.connections).filter(p=>p.ai_languageModel).length,1);
 assert.equal(main.settings.saveDataSuccessExecution,'none');
 console.log('Native Agent model/tool ports, child references and graph connections passed.');
 
@@ -31,7 +32,7 @@ assert(!main.nodes.some(n=>n.type.endsWith('.toolWorkflow')));
 const live=native.find(w=>w.id==='campusNativeAgentLive');
 assert(live && !live.active);
 assert.equal(live.nodes.find(n=>n.id==='memory').parameters.tableName,'live_agent_chat_histories');
-assert.equal(live.nodes.filter(n=>n.type.endsWith('.httpRequestTool')).length,4);
+assert.equal(live.nodes.filter(n=>n.type.endsWith('.httpRequestTool')).length,7);
 assert(!live.nodes.some(n=>n.parameters.url?.includes('mock-gateway')));
 for(const n of live.nodes.filter(n=>n.parameters.url)) {
  assert.equal(n.credentials.httpHeaderAuth.id,'campus-live-service');
