@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { Fault } from '../../utils/fault.js';
 import { userIdSchema } from './line.schema.js';
+import { linePlainText } from './line.text.js';
 
 export function verifySignature(raw: Buffer, signature: string | undefined, secret: string): boolean {
   if (!signature || !/^[A-Za-z0-9+/]{43}=$/.test(signature)) return false;
@@ -28,9 +29,20 @@ export class LineProvider {
       throw new Fault(401, 'IDENTITY_DENIED');
     return parsed.data.sub;
   }
+  async startLoading(userId:string):Promise<void> {
+    userIdSchema.parse(userId);
+    const response=await this.request('https://api.line.me/v2/bot/chat/loading/start',{
+      method:'POST',redirect:'error',signal:AbortSignal.timeout(1500),
+      headers:{authorization:`Bearer ${this.accessToken}`,'content-type':'application/json'},
+      body:JSON.stringify({chatId:userId,loadingSeconds:60}),
+    });
+    if(!response.ok)throw new Fault(503,'LOADING_UNAVAILABLE');
+  }
   async push(userId: string, text: string, retryKey: string): Promise<void> {
     userIdSchema.parse(userId);
     if (!text || text.length > 5000 || !z.uuid().safeParse(retryKey).success) throw new Fault(400, 'INVALID_REPLY');
+    text=linePlainText(text);
+    if(!text || text.length>5000)throw new Fault(400,'INVALID_REPLY');
     const response = await this.request('https://api.line.me/v2/bot/message/push', {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
       headers: { authorization: `Bearer ${this.accessToken}`, 'content-type': 'application/json', 'X-Line-Retry-Key': retryKey },

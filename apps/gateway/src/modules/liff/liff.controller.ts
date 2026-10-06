@@ -24,7 +24,19 @@ async function verify(){
  try{
   const idToken=liff.getIDToken();if(!idToken)throw Error('TOKEN');
   const res=await fetch('/liff/identity',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({idToken})});
-  if(!res.ok){const failure=await res.json();status.textContent=failure.error==='BINDING_REVOKED'?'你已解除綁定。如要重新使用，請先在助理聊天室傳送「重新啟用」，再重新開啟本頁。':res.status===403?'目前無法驗證此 LINE 帳號。':'目前無法驗證，請稍後再試。';return;}
+  if(!res.ok){
+   const failure=await res.json();
+   if(failure.error==='BINDING_REVOKED'){
+    status.textContent='你已解除綁定。如要重新使用，請先在助理聊天室傳送「重新啟用」，再重新開啟本頁。';
+   }else if(res.status===403){
+    status.textContent='目前無法驗證此 LINE 帳號。';
+   }else{
+    status.textContent='LINE 登入已失效，請點擊下方重新登入。';
+    try{if(liff.isLoggedIn())liff.logout();}catch(e){void e;}
+    button.disabled=false;button.hidden=false;
+   }
+   return;
+  }
   const verified=await res.json();if(!verified.csrfToken)throw Error('SESSION');csrfToken=verified.csrfToken;
   if(resultId){
    const response=await fetch('/liff/result',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({taskId:resultId})});
@@ -33,7 +45,11 @@ async function verify(){
    section.attachShadow({mode:'closed'}).innerHTML=result.html;section.hidden=false;button.hidden=true;status.textContent='Google 搜尋回答';return;
   }
   button.hidden=true;form.hidden=false;status.textContent='LINE 身分已驗證。請輸入本人的校務帳號；密碼不會保存。';
- }catch{status.textContent='無法完成 LINE 登入，請重新開啟頁面。';}
+ }catch{
+  status.textContent='無法完成 LINE 驗證，請點擊下方重新登入。';
+  try{if(liff.isLoggedIn())liff.logout();}catch(e){void e;}
+  button.disabled=false;button.hidden=false;
+ }
 }
 (async()=>{
  try{
@@ -41,7 +57,11 @@ async function verify(){
   const config=await res.json();await liff.init({liffId:config.liffId});
   if(liff.isLoggedIn()){await verify();return;}
   status.textContent='請使用 LINE 帳號登入。';button.disabled=false;
-  button.addEventListener('click',()=>{button.disabled=true;liff.login({redirectUri:config.endpoint+(resultId?'?result='+encodeURIComponent(resultId):'')});});
+  button.addEventListener('click',()=>{
+   button.disabled=true;
+   try{if(liff.isLoggedIn())liff.logout();}catch(e){void e;}
+   liff.login({redirectUri:config.endpoint+(resultId?'?result='+encodeURIComponent(resultId):'')});
+  });
  }catch{status.textContent='服務尚未完成設定，請稍後再試。';}
 })();`;
 export class LiffController {

@@ -33,7 +33,7 @@ export class AgentService {
     if(t.response) throw new Fault(409,'TASK_COMPLETED');
     if(++t.calls>4) throw new Fault(429,'TOOL_BUDGET');
     if(kind==='personal') {
-      if(!['schedule','absence','announcements'].includes(query)) throw new Fault(400,'ACTION_DENIED');
+      if(!['schedule','absence','announcements','grades','leave','leave_notes','leave_apply','send_mail'].includes(query)) throw new Fault(400,'ACTION_DENIED');
       // No course title, student identifier or private text is exposed to the agent.
       t.privateRef ??= randomUUID();
       return {synthetic:true,status:'prepared_locally',message:'私人結果由回覆階段本地組裝，不提供原文。'};
@@ -48,9 +48,9 @@ export class AgentService {
     let result: {answer:string;sourceIds:string[]};
     try {
       result=JSON.parse(output);
-      if(!result || typeof result.answer!=='string' || !result.answer.trim() || result.answer.length>3000 || !Array.isArray(result.sourceIds) || Object.keys(result).some(k=>!['answer','sourceIds'].includes(k)) || result.sourceIds.some(s=>typeof s!=='string'||!t.sources.has(s))) throw Error();
-      if(!t.privateRef && result.sourceIds.length===0) throw Error();
-      if(t.sources.size>0 && result.sourceIds.length===0) throw Error();
+      if(!result || typeof result.answer!=='string' || !result.answer.trim() || result.answer.length>3000 || !Array.isArray(result.sourceIds) || Object.keys(result).some(k=>!['answer','sourceIds'].includes(k)) || result.sourceIds.some(s=>typeof s!=='string'||!t.sources.has(s))) throw new Error();
+      if(!t.privateRef && result.sourceIds.length===0) throw new Error();
+      if(t.sources.size>0 && result.sourceIds.length===0) throw new Error();
     } catch {throw new Fault(422,'INVALID_AGENT_OUTPUT');}
     t.response={synthetic:true,delivered:false,status:'validated',answer:`【合成測試】${result.answer}`,sourceIds:result.sourceIds,privateResult:t.privateRef?'【合成測試】個人結果由本地模板呈現。':null};
     return t.response;

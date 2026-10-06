@@ -15,14 +15,38 @@ export class TaskService {
   constructor(private readonly repository:TaskRepository,private readonly identities:LineRepository,
     private readonly search?:SearchProvider,private readonly budget?:BudgetRepository,private readonly searchCostMicroUsd=0,private readonly school?:SchoolProvider,private readonly grounding?:GoogleGroundingProvider) {}
   prepare(auth:TaskAuth) {return this.repository.prepare(auth,(user,generation)=>this.identities.sessionKey(user,generation));}
-  async tool(auth:TaskAuth,kind:'web'|'personal',query:string) {
-    if(kind==='personal' && !['schedule','absence','announcements'].includes(query)) throw new Fault(400,'ACTION_DENIED');
+  async tool(auth:TaskAuth,kind:'web'|'personal',query:string,params?:Record<string,unknown>) {
+    let action:PersonalAction=query as PersonalAction;
+    let actionParams:Record<string,unknown>=params?{...params}:{};
+    if(kind==='personal'){
+      if(query.startsWith('{')&&query.endsWith('}')){
+        try{
+          const parsed=JSON.parse(query) as Record<string,unknown>;
+          if(typeof parsed.action==='string')action=parsed.action as PersonalAction;
+          actionParams={...parsed,...actionParams};
+        }catch(err){
+          // Treat non-JSON string as literal query keyword
+          void err;
+        }
+      }else if(query.startsWith('grades:')||query.startsWith('grades ')){
+        action='grades';
+        actionParams.semester=query.replace(/^grades[: ]/,'').trim();
+      }else if(query==='leave'||query.startsWith('leave:')||query.startsWith('leave ')){
+        if(actionParams.action==='records'||actionParams.action==='leave_notes'||actionParams.action==='query'){
+          action='leave_notes';
+        }else{
+          action='leave_apply';
+        }
+      }
+      const allowed:PersonalAction[]=['schedule','absence','announcements','grades','leave_notes','leave_apply','send_mail'];
+      if(!allowed.includes(action))throw new Fault(400,'ACTION_DENIED');
+    }
     const task=await this.repository.authorizeTool(auth);
     if(kind==='personal') {
       if(!this.school)throw new Fault(503,'SCHOOL_NOT_CONFIGURED');
       try{
-        const result=await this.school.query(task.userId,query as PersonalAction);
-        return await this.repository.recordPersonal(auth,query,result.sessionId,renderPersonal(result.result));
+        const result=await this.school.query(task.userId,action,actionParams);
+        return await this.repository.recordPersonal(auth,action,result.sessionId,renderPersonal(result.result));
       }catch(error){
         if(error instanceof Fault && error.code==='SCHOOL_LOGIN_REQUIRED')return this.repository.recordLoginRequired(auth);
         throw error;

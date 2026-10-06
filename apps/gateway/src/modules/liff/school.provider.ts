@@ -4,8 +4,9 @@ import {Fault} from '../../utils/fault.js';
 const failures=new Set(['SCHOOL_CREDENTIALS_REJECTED','SCHOOL_AUTHENTICATION_REJECTED','SCHOOL_LOGIN_RATE_LIMIT','SCHOOL_LOGIN_BUSY','SCHOOL_ACCOUNT_ALREADY_BOUND','SCHOOL_ACCOUNT_LOCKED','SCHOOL_CAPTCHA_FAILED']);
 export class SchoolProvider {
  constructor(private readonly origin:string,private readonly token:string,private readonly request:typeof fetch=fetch){}
- async query(userId:string,action:PersonalAction){
-  const response=await this.request(`${this.origin}/internal/v1/school/query`,{method:'POST',headers:{'content-type':'application/json','x-campus-school':this.token},body:JSON.stringify({userId,action}),redirect:'error',signal:AbortSignal.timeout(12000)});
+ async query(userId:string,action:PersonalAction,params?:Record<string,unknown>){
+  const payload=params?{userId,action,params}:{userId,action};
+  const response=await this.request(`${this.origin}/internal/v1/school/query`,{method:'POST',headers:{'content-type':'application/json','x-campus-school':this.token},body:JSON.stringify(payload),redirect:'error',signal:AbortSignal.timeout(12000)});
   const reader=response.body?.getReader();if(!reader)throw new Fault(502,'SCHOOL_UNAVAILABLE');
   const chunks:Uint8Array[]=[];let length=0;
   try{while(true){const next=await reader.read();if(next.done)break;length+=next.value.length;if(length>256*1024)throw new Fault(502,'SCHOOL_RESPONSE_TOO_LARGE');chunks.push(next.value);}}finally{await reader.cancel();}

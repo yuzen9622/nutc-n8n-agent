@@ -41,7 +41,7 @@ const controller=new TaskController(new TaskService(tasks,identities,search,budg
 let worker:TaskWorker|undefined;
 if(config.enabled && config.webhookUrl && config.webhookToken) {
   const dispatch=new DispatchProvider(config.webhookUrl,config.webhookToken);
-  worker=new TaskWorker(tasks,(task,signal)=>dispatch.dispatch(task,signal),(user,reply,key)=>provider.push(user,reply,key),()=>console.error('Task processing unavailable'));
+  worker=new TaskWorker(tasks,(task,signal)=>dispatch.dispatch(task,signal),(user,reply,key)=>provider.push(user,reply,key),()=>console.error('Task processing unavailable'),1000,user=>provider.startLoading(user));
 }
 const liff=config.publicOrigin && config.liffId?new LiffController(config.publicOrigin,config.liffId):undefined;
 const bindings=new BindingRepository(pool);

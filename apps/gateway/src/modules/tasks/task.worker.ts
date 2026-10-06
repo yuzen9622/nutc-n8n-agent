@@ -12,10 +12,14 @@ export class TaskWorker {
   constructor(private readonly queue:WorkerQueue,
     private readonly dispatch:(task:LeasedTask,signal:AbortSignal)=>Promise<void>,
     private readonly send:(userId:string,reply:string,key:string)=>Promise<void>,
-    private readonly onError:()=>void=()=>{},private readonly interval=1000) {}
+    private readonly onError:()=>void=()=>{},private readonly interval=1000,
+    private readonly startLoading?:(userId:string)=>Promise<void>) {}
   async tick():Promise<boolean> {
     const task=await this.queue.claim();
     if(!task) return false;
+    // Only claimed/authorized tasks get an animation, never raw webhook events.
+    // Await its bounded request so it cannot arrive after the actual reply.
+    try { await this.startLoading?.(task.userId); } catch { this.onError(); }
     try { await this.dispatch(task,this.controller.signal); }
     catch { await this.queue.fail(task); }
     return true;
