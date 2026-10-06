@@ -1,0 +1,15 @@
+export const SCHOOL={
+  origins:new Set(['https://sso.nutc.edu.tw','https://ais.nutc.edu.tw','https://academic1.nutc.edu.tw','https://eportal.nutc.edu.tw']),
+  studentEntryOrigins:new Set(['https://ais.nutc.edu.tw','https://academic1.nutc.edu.tw','https://eportal.nutc.edu.tw']),
+  portalEntry:'https://eportal.nutc.edu.tw/?app_id=NUTC_6401',
+  portalOrigin:'https://eportal.nutc.edu.tw',
+  portalLogin:'https://eportal.nutc.edu.tw/login_action.php',
+  portalCaptcha:'https://eportal.nutc.edu.tw/login_page.php',
+  studentAppId:'NUTC_6401',
+  login:'https://sso.nutc.edu.tw/ePortal/Default.aspx',
+  captcha:'https://sso.nutc.edu.tw/ePortal/Validation_Code.aspx',
+  home:'https://ais.nutc.edu.tw/student/home.aspx',
+  schedule:'https://ais.nutc.edu.tw/student/courses/my_week_time.aspx',
+  absence:'https://ais.nutc.edu.tw/student/discipline/absence_list.aspx',
+  loginDeadlineMs:30_000,ocrDeadlineMs:20_000,maxCaptchaRounds:3,responseLimit:1024*1024,captchaLimit:256*1024,
+} as const;
