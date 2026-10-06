@@ -129,3 +129,103 @@ test('portal chooses current AIS entry before similarly named legacy student lin
  assert.throws(()=>loginOutcome('<a href="https://attacker.example/">學生管理系統</a>'),/AIS_LINK_DENIED/);
  assert.throws(()=>loginOutcome('<a href="https://user:password@ais.nutc.edu.tw/">學生管理系統</a>'),/AIS_LINK_DENIED/);
 });
+
+test('student grades query parses multiple semesters, averages, conduct, rank, and respects semester filter',async()=>{
+ const gradesHtml='<table class="grid_view">'
+  +'<tr class="tr_data" data-yysem="1121"><td>1</td><td>資訊一甲</td><td>計算機概論</td><td></td><td>必</td><td>3</td><td>88.0</td></tr>'
+  +'<tr class="tr_data" data-yysem="1121"><td>2</td><td>資訊一甲</td><td>微積分</td><td></td><td>必</td><td>3</td><td>92.0</td></tr>'
+  +'<tr class="tr_total" data-yysem="1121"><td></td><td></td><td></td><td></td><td>85.0</td><td>3</td></tr>'
+  +'<tr class="tr_data" data-yysem="1122"><td>1</td><td>資訊一甲</td><td>資料結構</td><td></td><td>必</td><td>3</td><td>90.0</td></tr>'
+  +'<tr class="tr_total" data-yysem="1122"><td></td><td></td><td></td><td></td><td>88.0</td><td>1</td></tr>'
+  +'</table>';
+ const client=new SchoolClient(new CookieJar(),async()=>html(gradesHtml));
+ const service=new StudentService();
+
+ const sem1=await service.query(client,'grades',{semester:'1121'});
+ assert.equal(sem1.kind,'grades');
+ assert.equal(sem1.semester,'1121');
+ assert.equal(sem1.items.length,2);
+ assert.equal(sem1.items[0]?.name,'計算機概論');
+ assert.equal(sem1.totalScore,90);
+ assert.equal(sem1.conductScore,'85.0');
+ assert.equal(sem1.classRank,3);
+ assert.deepEqual(sem1.availableSemesters,['1121','1122']);
+
+ const normalized=await service.query(client,'grades',{semester:'112-1'});
+ assert.equal(normalized.semester,'1121');
+ assert.equal(normalized.items.length,2);
+
+ const sem2=await service.query(client,'grades',{semester:'1122'});
+ assert.equal(sem2.semester,'1122');
+ assert.equal(sem2.items.length,1);
+ assert.equal(sem2.classRank,1);
+});
+
+test('student leave query parses leave notes and submit sends compliant form payload',async()=>{
+ const notesHtml='<table class="grid_view">'
+  +'<tr data-key="101"><td>1</td><td>2026/04/20</td><td>[事假] <i>04/20 第1-2節</i><br>家裡有事</td><td>核准</td><td>審核中</td><td>准假</td></tr>'
+  +'</table>';
+ const notesClient=new SchoolClient(new CookieJar(),async()=>html(notesHtml));
+ const service=new StudentService();
+ const notesResult=await service.query(notesClient,'leave_notes');
+ assert.equal(notesResult.kind,'leave_notes');
+ assert.equal(notesResult.items.length,1);
+ assert.deepEqual(notesResult.items[0],{
+  id:101,appliedAt:'2026/04/20',type:'事假',courseInfo:'04/20 第1-2節',reason:'家裡有事',teacherStatus:'核准',finalStatus:'審核中',remark:'准假'
+ });
+
+ let submittedBody:string|undefined;
+ const submitClient=new SchoolClient(new CookieJar(),async(url,options)=>{
+  if(url.href===SCHOOL.absenceNoteCreate){submittedBody=options.body;return html('<html>請假單儲存成功</html>');}
+  return html(home);
+ });
+ const submitResult=await service.query(submitClient,'leave_apply',{
+  date:'2026/04/29',begin_sec:1,end_sec:2,leave_type:'病假',reason:'流感就診'
+ });
+ assert.equal(submitResult.kind,'leave_apply');
+ assert.equal(submitResult.success,true);
+ assert(submittedBody);
+ const params=new URLSearchParams(submittedBody);
+ assert.equal(params.get('anid'),'0');
+ assert.equal(params.get('date'),'2026/04/29');
+ assert.equal(params.get('begin_sec'),'1');
+ assert.equal(params.get('end_sec'),'2');
+ assert.equal(params.get('an_type'),'2');
+ assert.equal(params.get('reason'),'流感就診');
+ assert.equal(params.get('update'),'儲存');
+ assert.equal(params.get('detail'),'[[1,1],[1,2]]');
+
+ const incomplete=await service.query(submitClient,'leave_apply',{reason:''});
+ assert.equal(incomplete.success,false);
+});
+
+test('student mail send retrieves compose defaults and submits form to webmail',async()=>{
+ const submenuHtml='<a href="/cgi-bin/genMail?rand=42">寫信</a>';
+ const genMailHtml='<input name="cpid" value="cp_test_99"><input name="crumb" value="crumb_test_88"><input name="FromText" value="s112233@nutc.edu.tw">';
+ let sendPayload:string|undefined;
+
+ const client=new SchoolClient(new CookieJar(),async(url,options)=>{
+  if(url.href.includes('/submenu'))return html(submenuHtml);
+  if(url.href.includes('/genMail'))return html(genMailHtml);
+  if(url.href===SCHOOL.webmailSend){sendPayload=options.body;return html('mail sent OK');}
+  return html('');
+ });
+
+ const service=new StudentService();
+ const result=await service.query(client,'send_mail',{
+  to:'teacher@nutc.edu.tw',subject:'詢問期末專題',content:'老師您好，想請教專題報告問題。'
+ });
+ assert.equal(result.kind,'send_mail');
+ assert.equal(result.success,true);
+ assert(sendPayload);
+ const form=new URLSearchParams(sendPayload);
+ assert.equal(form.get('cpid'),'cp_test_99');
+ assert.equal(form.get('crumb'),'crumb_test_88');
+ assert.equal(form.get('FromText'),'s112233@nutc.edu.tw');
+ assert.equal(form.get('to'),'teacher@nutc.edu.tw');
+ assert.equal(form.get('mailSubject'),'詢問期末專題');
+ assert.equal(form.get('mailText'),'老師您好，想請教專題報告問題。');
+
+ const missing=await service.query(client,'send_mail',{to:''});
+ assert.equal(missing.success,false);
+});

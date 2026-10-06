@@ -1,5 +1,5 @@
 export const SCHOOL={
-  origins:new Set(['https://sso.nutc.edu.tw','https://ais.nutc.edu.tw','https://academic1.nutc.edu.tw','https://eportal.nutc.edu.tw']),
+  origins:new Set(['https://sso.nutc.edu.tw','https://ais.nutc.edu.tw','https://academic1.nutc.edu.tw','https://eportal.nutc.edu.tw','https://webmail.nutc.edu.tw']),
   studentEntryOrigins:new Set(['https://ais.nutc.edu.tw','https://academic1.nutc.edu.tw','https://eportal.nutc.edu.tw']),
   portalEntry:'https://eportal.nutc.edu.tw/?app_id=NUTC_6401',
   portalOrigin:'https://eportal.nutc.edu.tw',
@@ -11,5 +11,12 @@ export const SCHOOL={
   home:'https://ais.nutc.edu.tw/student/home.aspx',
   schedule:'https://ais.nutc.edu.tw/student/courses/my_week_time.aspx',
   absence:'https://ais.nutc.edu.tw/student/discipline/absence_list.aspx',
+  historyScores:'https://ais.nutc.edu.tw/student/grade/my_hist_grade.aspx',
+  currentScores:'https://ais.nutc.edu.tw/student/grade/my_grade.aspx',
+  absenceNotes:'https://ais.nutc.edu.tw/student/apps/my_absence_notes.aspx',
+  absenceNoteCreate:'https://ais.nutc.edu.tw/student/apps/my_absence_note_form.aspx?anid=0',
+  webmailSubmenu:'https://webmail.nutc.edu.tw/cgi-bin/submenu',
+  webmailGenMail:'https://webmail.nutc.edu.tw/cgi-bin/genMail',
+  webmailSend:'https://webmail.nutc.edu.tw/cgi-bin/mailSend',
   loginDeadlineMs:30_000,ocrDeadlineMs:20_000,maxCaptchaRounds:3,responseLimit:1024*1024,captchaLimit:256*1024,
 } as const;

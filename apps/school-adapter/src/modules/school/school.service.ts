@@ -19,12 +19,12 @@ export class SchoolService {
    throw error;
   }finally{await client?.jar.removeAllCookies();await this.sessions.cancelLogin(lease,failure);}
  }
- async query(userId:string,action:StudentAction){
+ async query(userId:string,action:StudentAction,params:Record<string,unknown>={}){
   let sessionId:string|undefined;
   try{return await this.sessions.withSession(userId,async stored=>{
    sessionId=stored.id;
    let jar:CookieJar;try{jar=await CookieJar.deserialize(stored.cookies);}catch{throw new SchoolError('SCHOOL_SESSION_INVALID');}
-   try{const data=await this.students.query(new SchoolClient(jar),action);return {cookies:JSON.stringify(await jar.serialize()),data:{sessionId:stored.id,result:data}};}
+   try{const data=await this.students.query(new SchoolClient(jar),action,params);return {cookies:JSON.stringify(await jar.serialize()),data:{sessionId:stored.id,result:data}};}
    finally{await jar.removeAllCookies();}
   });}catch(error){
    if(sessionId && error instanceof SchoolError && ['SCHOOL_SESSION_EXPIRED','SCHOOL_SESSION_INVALID'].includes(error.code))await this.sessions.invalidate(userId,sessionId);
