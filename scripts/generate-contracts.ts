@@ -1,0 +1,5 @@
+import {z} from 'zod';
+import {writeFileSync} from 'node:fs';
+import {contractSchemas,scenarios} from '../apps/mock-gateway/src/modules/mock/mock.schema.js';
+writeFileSync('docs/mock-input-schemas.json',JSON.stringify(Object.fromEntries(Object.entries(contractSchemas).map(([k,s])=>[k,z.toJSONSchema(s)])),null,2)+'\n');
+writeFileSync('tests/fixtures/scenarios.json',JSON.stringify(scenarios.map(scenario=>({scenario,expectedOutcome:scenario==='binding_prompt'?'binding_required':scenario==='clarify_prompt'?'clarify':scenario==='unsupported_prompt'?'unsupported':scenario==='unknown_personal'?'unsupported':scenario==='provider_timeout'?'UPSTREAM_FAILED':scenario==='unknown_intent'?'UNKNOWN_INTENT':scenario==='mixed_partial'?'partial':['public_no_source','retrieval_exhausted','repair_failed','unknown_route','unknown_decision','rewrite_denied'].includes(scenario)?'insufficient':['reauth_required','ocr_failed','credential_invalid','session_expired','unknown_personal'].includes(scenario)?'reauth_required':'answered'})),null,2)+'\n');

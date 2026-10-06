@@ -1,0 +1,1270 @@
+{
+  "id": "campusWF01phase1",
+  "name": "campus-message-v1",
+  "active": false,
+  "nodes": [
+    {
+      "id": "M01",
+      "name": "M01 接收內部任務",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campus-message-v1",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "campus-message-synthetic",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-webhook-synthetic",
+          "name": "Campus synthetic webhook"
+        }
+      }
+    },
+    {
+      "id": "M01N",
+      "name": "M01N Webhook body 引用",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M02",
+      "name": "M02 子流程入口",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        220
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "M03C",
+      "name": "M03C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        430,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M03",
+      "name": "M03 領取任務",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        650,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/claim' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "M03R",
+      "name": "M03R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        870,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('M03C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M04",
+      "name": "M04 是否取得執行權",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1150,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "M04-rule",
+              "leftValue": "={{ $json.acquired === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "M04D",
+      "name": "M04D 停止重複任務",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1400,
+        950
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json,status:\"duplicate_stopped\"})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M05C",
+      "name": "M05C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1330,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M05",
+      "name": "M05 意圖與參數規劃",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1550,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/plan' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M05R",
+      "name": "M05R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1770,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('M05C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M06",
+      "name": "M06 意圖分流",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        2050,
+        80
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "public",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "public"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "personal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "personal"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "mixed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "mixed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "local",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "local"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "M07C",
+      "name": "M07C 核定操作輸入",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2280,
+        -160
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json, operationId:$json.operations.find(o=>o.kind==='public').operationId, resultRefs:$json.resultRefs || []})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M07",
+      "name": "M07 公開問答 WF-02",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2500,
+        -160
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "campusWF02phase1",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M08C",
+      "name": "M08C 核定操作輸入",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2280,
+        160
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json, operationId:$json.operations.find(o=>o.kind==='personal').operationId, resultRefs:$json.resultRefs || []})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M08",
+      "name": "M08 個人查詢 WF-03",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2500,
+        160
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "campusWF03phase1",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M09C",
+      "name": "M09C 核定操作輸入",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2280,
+        480
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json, operationId:$json.operations.find(o=>o.kind==='public').operationId, resultRefs:$json.resultRefs || []})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M09",
+      "name": "M09 混合公開 WF-02",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        2500,
+        480
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "campusWF02phase1",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M10C",
+      "name": "M10C 核定操作輸入",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2930,
+        480
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json, operationId:$json.operations.find(o=>o.kind==='personal').operationId, resultRefs:$json.resultRefs || []})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M10",
+      "name": "M10 混合個人 WF-03",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        3150,
+        480
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "campusWF03phase1",
+          "mode": "id"
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M11",
+      "name": "M11 彙整結果引用",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3650,
+        480
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M12",
+      "name": "M12 使用提示結果",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3150,
+        780
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json,resultRefs:[$json.resultRef]})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M13C",
+      "name": "M13C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3930,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M13",
+      "name": "M13 完成並安排回覆",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4150,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/complete' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({resultRefs:$json.resultRefs}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "M13R",
+      "name": "M13R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4370,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('M13C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M14",
+      "name": "M14 回覆排程狀態",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4650,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({taskId:$json.taskId,requestId:$json.requestId,status:$json.status,outcome:$json.outcome})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M15U",
+      "name": "M15U 未知意圖錯誤",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2450,
+        1100
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json,errorCode:\"UNKNOWN_INTENT\"})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M15E",
+      "name": "M15E 技術失敗引用",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3100,
+        1100
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('M03R 回復引用上下文').first().json,errorCode:'UPSTREAM_FAILED'})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M15C",
+      "name": "M15C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3580,
+        1100
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "M15",
+      "name": "M15 回報可處理錯誤",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3800,
+        1100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/fail' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({errorCode:$json.errorCode}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "M15R",
+      "name": "M15R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4020,
+        1100
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('M15C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "MZONE1",
+      "name": "MZONE1 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -420
+      ],
+      "parameters": {
+        "content": "## 接收與授權\nWebhook／子流程 → claim。只有 acquired 繼續；重複事件正常停止。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MZONE2",
+      "name": "MZONE2 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        -420
+      ],
+      "parameters": {
+        "content": "## 意圖規劃\nplan 只回核定 operations 與引用；Switch 有未知意圖出口。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MZONE3",
+      "name": "MZONE3 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        -420
+      ],
+      "parameters": {
+        "content": "## 公開問答\nWF-02：knowledge／web／both。只傳 queryRef、evidenceRef、resultRef。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MZONE4",
+      "name": "MZONE4 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2900,
+        -420
+      ],
+      "parameters": {
+        "content": "## 個人查詢與混合\nWF-03：本人 Session；mixed 順序處理並保留兩個結果引用。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MZONE5",
+      "name": "MZONE5 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3900,
+        -420
+      ],
+      "parameters": {
+        "content": "## 回覆\ncomplete 驗證結果引用、建立唯一合成 outbox。queued 不代表 delivered。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MZONE6",
+      "name": "MZONE6 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        1370
+      ],
+      "parameters": {
+        "content": "## 異常處理\nclaim 前錯誤交 WF-04；取得 lease 後走 fail。錯誤處理本身失敗不迴圈。",
+        "height": 180,
+        "width": 520
+      }
+    },
+    {
+      "id": "MNOTE",
+      "name": "MNOTE 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -650
+      ],
+      "parameters": {
+        "content": "## 合成資料專用：接收 → 意圖規劃 → 公開／個人 → 回覆\n所有 HTTP 明確保存及回復 context；混合採順序執行。輸出 queued_for_delivery 不代表 LINE 已收到。",
+        "height": 180,
+        "width": 520
+      }
+    }
+  ],
+  "connections": {
+    "M01 接收內部任務": {
+      "main": [
+        [
+          {
+            "node": "M01N Webhook body 引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M03C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M03 領取任務",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M03 領取任務": {
+      "main": [
+        [
+          {
+            "node": "M03R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M02 子流程入口": {
+      "main": [
+        [
+          {
+            "node": "M03C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M01N Webhook body 引用": {
+      "main": [
+        [
+          {
+            "node": "M03C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M03R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M04 是否取得執行權",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M04 是否取得執行權": {
+      "main": [
+        [
+          {
+            "node": "M05C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M04D 停止重複任務",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M05C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M05 意圖與參數規劃",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M05 意圖與參數規劃": {
+      "main": [
+        [
+          {
+            "node": "M05R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M05R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M06 意圖分流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M07C 核定操作輸入": {
+      "main": [
+        [
+          {
+            "node": "M07 公開問答 WF-02",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M08C 核定操作輸入": {
+      "main": [
+        [
+          {
+            "node": "M08 個人查詢 WF-03",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M09C 核定操作輸入": {
+      "main": [
+        [
+          {
+            "node": "M09 混合公開 WF-02",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M10C 核定操作輸入": {
+      "main": [
+        [
+          {
+            "node": "M10 混合個人 WF-03",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M06 意圖分流": {
+      "main": [
+        [
+          {
+            "node": "M07C 核定操作輸入",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M08C 核定操作輸入",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M09C 核定操作輸入",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M12 使用提示結果",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15U 未知意圖錯誤",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M09 混合公開 WF-02": {
+      "main": [
+        [
+          {
+            "node": "M10C 核定操作輸入",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M10 混合個人 WF-03": {
+      "main": [
+        [
+          {
+            "node": "M11 彙整結果引用",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M13C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M13 完成並安排回覆",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M13 完成並安排回覆": {
+      "main": [
+        [
+          {
+            "node": "M13R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M07 公開問答 WF-02": {
+      "main": [
+        [
+          {
+            "node": "M13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M08 個人查詢 WF-03": {
+      "main": [
+        [
+          {
+            "node": "M13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "M15E 技術失敗引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M11 彙整結果引用": {
+      "main": [
+        [
+          {
+            "node": "M13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M12 使用提示結果": {
+      "main": [
+        [
+          {
+            "node": "M13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M13R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M14 回覆排程狀態",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M15C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M15 回報可處理錯誤",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M15 回報可處理錯誤": {
+      "main": [
+        [
+          {
+            "node": "M15R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M15U 未知意圖錯誤": {
+      "main": [
+        [
+          {
+            "node": "M15C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M15E 技術失敗引用": {
+      "main": [
+        [
+          {
+            "node": "M15C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "M15R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "M14 回覆排程狀態",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 100,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "campusWF04phase1"
+  },
+  "pinData": {},
+  "tags": []
+}

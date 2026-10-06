@@ -1,0 +1,432 @@
+{
+  "id": "campusWF05phase1",
+  "name": "campus-maintenance-v1",
+  "active": false,
+  "nodes": [
+    {
+      "id": "T01",
+      "name": "T01 每五分鐘維護",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "T01M",
+      "name": "T01M 手動維護",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        230
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "T02C",
+      "name": "T02C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        230,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T02",
+      "name": "T02 清理過期資料",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        450,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-gateway:3000/internal/v1/maintenance/cleanup",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({}) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-maintenance-synthetic",
+          "name": "Campus synthetic maintenance"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "T02R",
+      "name": "T02R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        670,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('T02C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T03C",
+      "name": "T03C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T03",
+      "name": "T03 彙整健康狀態",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://mock-gateway:3000/internal/v1/maintenance/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-maintenance-synthetic",
+          "name": "Campus synthetic maintenance"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "T03R",
+      "name": "T03R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('T03C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T04",
+      "name": "T04 健康異常",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "T04-rule",
+              "leftValue": "={{ $json.healthy !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "T05C",
+      "name": "T05C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1830,
+        400
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T05",
+      "name": "T05 記錄維運事件",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2050,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-gateway:3000/internal/v1/observability/workflow-errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({workflowId:$workflow.id,executionId:$execution.id,errorCode:\"WORKFLOW_FAILED\"}) }}"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-observability-synthetic",
+          "name": "Campus synthetic observability"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "T05R",
+      "name": "T05R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2270,
+        400
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('T05C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "T06",
+      "name": "T06 維護完成",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2050,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({healthy:true,synthetic:true})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "TNOTE",
+      "name": "TNOTE 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -650
+      ],
+      "parameters": {
+        "content": "## 維護\n只用 maintenance／observability credentials；不查學生資料、不推播。",
+        "height": 180,
+        "width": 520
+      }
+    }
+  ],
+  "connections": {
+    "T02C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "T02 清理過期資料",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T02 清理過期資料": {
+      "main": [
+        [
+          {
+            "node": "T02R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T01 每五分鐘維護": {
+      "main": [
+        [
+          {
+            "node": "T02C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T01M 手動維護": {
+      "main": [
+        [
+          {
+            "node": "T02C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T03C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "T03 彙整健康狀態",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T03 彙整健康狀態": {
+      "main": [
+        [
+          {
+            "node": "T03R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T02R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "T03C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T03R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "T04 健康異常",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T05C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "T05 記錄維運事件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T05 記錄維運事件": {
+      "main": [
+        [
+          {
+            "node": "T05R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T04 健康異常": {
+      "main": [
+        [
+          {
+            "node": "T05C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "T06 維護完成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 100,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "campusWF04phase1"
+  },
+  "pinData": {},
+  "tags": []
+}

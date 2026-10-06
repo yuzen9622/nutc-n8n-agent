@@ -1,0 +1,2072 @@
+{
+  "id": "campusWF02phase1",
+  "name": "campus-public-qa-v1",
+  "active": false,
+  "nodes": [
+    {
+      "id": "Q01",
+      "name": "Q01 公開操作輸入",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "passthrough"
+      }
+    },
+    {
+      "id": "Q02C",
+      "name": "Q02C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q02",
+      "name": "Q02 準備核定路徑",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/prepare' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q02R",
+      "name": "Q02R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        620,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q02C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q03",
+      "name": "Q03 來源分流",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "knowledge",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "knowledge"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "both",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "both"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.route }}",
+                    "rightValue": "web",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "web"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "Q04C",
+      "name": "Q04C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1130,
+        -250
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q04",
+      "name": "Q04 知識庫檢索",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1350,
+        -250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/knowledge' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,queryRef:$json.queryRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q04R",
+      "name": "Q04R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1570,
+        -250
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q04C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q05",
+      "name": "Q05 需要網頁",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1850,
+        -250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Q05-rule",
+              "leftValue": "={{ $json.route === \"both\" }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Q06C",
+      "name": "Q06C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1980,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q06",
+      "name": "Q06 官方搜尋",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2200,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/search' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,queryRef:$json.queryRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q06R",
+      "name": "Q06R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2420,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q06C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q07C",
+      "name": "Q07C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2630,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q07",
+      "name": "Q07 讀官方原文",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2850,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/read' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,searchRef:$json.searchRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q07R",
+      "name": "Q07R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3070,
+        80
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q07C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q08C",
+      "name": "Q08C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3280,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q08",
+      "name": "Q08 彙整證據",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3500,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/collect' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q08R",
+      "name": "Q08R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3720,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q08C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q09",
+      "name": "Q09 已使用補查",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4000,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Q09-rule",
+              "leftValue": "={{ $json.iteration === 1 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Q10C",
+      "name": "Q10C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        250
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q10",
+      "name": "Q10 評估證據",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4400,
+        250
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/assess' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,evidenceRef:$json.evidenceRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q10R",
+      "name": "Q10R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4620,
+        250
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q10C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q11",
+      "name": "Q11 證據決策",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        4900,
+        250
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "answer",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "answer"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "retrieve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "retrieve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "clarify",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "clarify"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "insufficient",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "insufficient"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "Q12C",
+      "name": "Q12C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        650
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q12",
+      "name": "Q12 核定補查條件",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4400,
+        650
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/rewrite-query' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,assessmentRef:$json.assessmentRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q12R",
+      "name": "Q12R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4620,
+        650
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q12C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q12A",
+      "name": "Q12A 補查預算允許",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3800,
+        650
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Q12A-rule",
+              "leftValue": "={{ $json.allowed === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Q13C",
+      "name": "Q13C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5180,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q13",
+      "name": "Q13 生成答案",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5400,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/generate' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,evidenceRef:$json.evidenceRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q13R",
+      "name": "Q13R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5620,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q13C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q14C",
+      "name": "Q14C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        5830,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q14",
+      "name": "Q14 引用與格式驗證",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6050,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/validate' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,draftRef:$json.draftRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q14R",
+      "name": "Q14R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6270,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q14C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q15",
+      "name": "Q15 驗證分流",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        6550,
+        0
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.validation }}",
+                    "rightValue": "valid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "valid"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.validation }}",
+                    "rightValue": "repairable",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "repairable"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "Q16C",
+      "name": "Q16C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6680,
+        350
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q16",
+      "name": "Q16 一次格式修復",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6900,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/repair' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,draftRef:$json.draftRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q16R",
+      "name": "Q16R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7120,
+        350
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q16C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q17C",
+      "name": "Q17C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7330,
+        350
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q17",
+      "name": "Q17 再驗證",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        7550,
+        350
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/validate' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,draftRef:$json.draftRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q17R",
+      "name": "Q17R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7770,
+        350
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q17C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q17A",
+      "name": "Q17A 再驗證有效",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        8050,
+        350
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Q17A-rule",
+              "leftValue": "={{ $json.validation === \"valid\" }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Q18C",
+      "name": "Q18C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7330,
+        800
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q18",
+      "name": "Q18 追問或不足提示",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        7550,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/fallback' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,reasonCode:\"insufficient\"}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q18R",
+      "name": "Q18R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7770,
+        800
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q18C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q19C",
+      "name": "Q19C 保存引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8280,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify($json) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q19",
+      "name": "Q19 產生呈現引用",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        8500,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://mock-gateway:3000/internal/v1/tasks/' + $json.taskId + '/public/render' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({operationId:$json.operationId,draftRef:$json.draftRef}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Task-Capability",
+              "value": "={{ $json.taskCapability }}"
+            },
+            {
+              "name": "X-Task-Lease",
+              "value": "={{ $json.leaseToken || \"\" }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-task-synthetic",
+          "name": "Campus synthetic task"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "Q19R",
+      "name": "Q19R 回復引用上下文",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        8720,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$('Q19C 保存引用上下文').item.json, ...$json.data})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "Q20",
+      "name": "Q20 子流程結果",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        9000,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify(({...$json,resultRefs:[...($json.resultRefs || []),$json.resultRef]})) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "QNOTE",
+      "name": "QNOTE 資料邊界",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -650
+      ],
+      "parameters": {
+        "content": "## 公開問答：只傳 refs\nknowledge／web／both；Gateway 限制一次補查、一次修復。Phase 1 為合成證據，沒有 Gemini、Brave 或學校外連。",
+        "height": 180,
+        "width": 520
+      }
+    }
+  ],
+  "connections": {
+    "Q02C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q02 準備核定路徑",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q02 準備核定路徑": {
+      "main": [
+        [
+          {
+            "node": "Q02R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q01 公開操作輸入": {
+      "main": [
+        [
+          {
+            "node": "Q02C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q02R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q03 來源分流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q04C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q04 知識庫檢索",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q04 知識庫檢索": {
+      "main": [
+        [
+          {
+            "node": "Q04R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q03 來源分流": {
+      "main": [
+        [
+          {
+            "node": "Q04C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q04C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q06C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q04R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q05 需要網頁",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q06C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q06 官方搜尋",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q06 官方搜尋": {
+      "main": [
+        [
+          {
+            "node": "Q06R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q05 需要網頁": {
+      "main": [
+        [
+          {
+            "node": "Q06C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q08C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q07C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q07 讀官方原文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q07 讀官方原文": {
+      "main": [
+        [
+          {
+            "node": "Q07R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q06R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q07C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q08C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q08 彙整證據",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q08 彙整證據": {
+      "main": [
+        [
+          {
+            "node": "Q08R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q07R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q08C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q08R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q09 已使用補查",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q10C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q10 評估證據",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q10 評估證據": {
+      "main": [
+        [
+          {
+            "node": "Q10R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q09 已使用補查": {
+      "main": [
+        [
+          {
+            "node": "Q13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q10C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q10R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q11 證據決策",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q12C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q12 核定補查條件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q12 核定補查條件": {
+      "main": [
+        [
+          {
+            "node": "Q12R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q11 證據決策": {
+      "main": [
+        [
+          {
+            "node": "Q13C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q12C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q12R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q12A 補查預算允許",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q12A 補查預算允許": {
+      "main": [
+        [
+          {
+            "node": "Q03 來源分流",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q13C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q13 生成答案",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q13 生成答案": {
+      "main": [
+        [
+          {
+            "node": "Q13R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q14C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q14 引用與格式驗證",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q14 引用與格式驗證": {
+      "main": [
+        [
+          {
+            "node": "Q14R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q13R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q14C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q14R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q15 驗證分流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q16C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q16 一次格式修復",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q16 一次格式修復": {
+      "main": [
+        [
+          {
+            "node": "Q16R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q15 驗證分流": {
+      "main": [
+        [
+          {
+            "node": "Q19C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q16C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q17C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q17 再驗證",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q17 再驗證": {
+      "main": [
+        [
+          {
+            "node": "Q17R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q16R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q17C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q17R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q17A 再驗證有效",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q18C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q18 追問或不足提示",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q18 追問或不足提示": {
+      "main": [
+        [
+          {
+            "node": "Q18R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q17A 再驗證有效": {
+      "main": [
+        [
+          {
+            "node": "Q19C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Q18C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q19C 保存引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q19 產生呈現引用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q19 產生呈現引用": {
+      "main": [
+        [
+          {
+            "node": "Q19R 回復引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q18R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q19C 保存引用上下文",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Q19R 回復引用上下文": {
+      "main": [
+        [
+          {
+            "node": "Q20 子流程結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 100,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "campusWF04phase1"
+  },
+  "pinData": {},
+  "tags": []
+}

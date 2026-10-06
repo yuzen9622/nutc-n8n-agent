@@ -1,0 +1,122 @@
+[
+  {
+    "scenario": "public_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "public_no_source",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "schedule_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "absence_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "announcements_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "reauth_required",
+    "expectedOutcome": "reauth_required"
+  },
+  {
+    "scenario": "mixed_partial",
+    "expectedOutcome": "partial"
+  },
+  {
+    "scenario": "provider_timeout",
+    "expectedOutcome": "UPSTREAM_FAILED"
+  },
+  {
+    "scenario": "duplicate_event",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "ocr_failed",
+    "expectedOutcome": "reauth_required"
+  },
+  {
+    "scenario": "credential_invalid",
+    "expectedOutcome": "reauth_required"
+  },
+  {
+    "scenario": "knowledge_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "web_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "both_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "retrieval_retry",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "retrieval_exhausted",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "stale_knowledge",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "source_conflict",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "embedding_unavailable",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "unknown_intent",
+    "expectedOutcome": "UNKNOWN_INTENT"
+  },
+  {
+    "scenario": "unknown_personal",
+    "expectedOutcome": "unsupported"
+  },
+  {
+    "scenario": "repair_success",
+    "expectedOutcome": "answered"
+  },
+  {
+    "scenario": "repair_failed",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "unknown_route",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "unknown_decision",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "rewrite_denied",
+    "expectedOutcome": "insufficient"
+  },
+  {
+    "scenario": "session_expired",
+    "expectedOutcome": "reauth_required"
+  },
+  {
+    "scenario": "binding_prompt",
+    "expectedOutcome": "binding_required"
+  },
+  {
+    "scenario": "clarify_prompt",
+    "expectedOutcome": "clarify"
+  },
+  {
+    "scenario": "unsupported_prompt",
+    "expectedOutcome": "unsupported"
+  }
+]
