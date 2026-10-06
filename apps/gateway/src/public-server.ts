@@ -1,0 +1,11 @@
+import { createServer } from 'node:http';
+import { z } from 'zod';
+import { publicRouter } from './modules/ingress/public.router.js';
+const origin=z.url().parse(process.env.PUBLIC_ORIGIN),url=new URL(origin);
+if(url.protocol!=='https:' || url.origin!==origin)throw Error('INVALID_PUBLIC_ORIGIN');
+const liffId=process.env.LIFF_ID;
+if(liffId && (!/^\d+-[A-Za-z0-9]+$/.test(liffId) || !liffId.startsWith(`${process.env.LINE_LOGIN_CHANNEL_ID}-`)))throw Error('INVALID_LIFF_ID');
+const server=createServer(publicRouter(origin,liffId));
+server.requestTimeout=10000;server.headersTimeout=10000;
+server.listen(3101,'127.0.0.1',()=>console.log('Public LINE/LIFF ingress ready on loopback port 3101'));
+for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{server.close();server.closeIdleConnections();});
