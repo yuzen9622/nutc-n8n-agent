@@ -1,12 +1,13 @@
 import {requiredEnv} from './env.mjs';
 import {importCredentials} from './n8n-credentials.mjs';
-import {session} from './n8n-client.mjs';
+import {session,base} from './n8n-client.mjs';
 import {readFileSync,writeFileSync,mkdirSync,cpSync,realpathSync,rmSync} from 'node:fs';
 import {execFileSync,spawn} from 'node:child_process';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {parse} from 'flatted';
 import assert from 'node:assert/strict';
 const googleMode=process.argv.includes('--google-grounding');
+if(!['http://localhost:15679','http://127.0.0.1:15679'].includes(base))throw new Error('LOCAL_N8N_REQUIRED');
 const api=await session();
 const unique=randomUUID().replaceAll('-','');
 const directory=`.local/live-probe-${unique}`,remote=`/handoff/live-probe-${unique}`,schema=`live_probe_${unique}`;
@@ -15,7 +16,7 @@ mkdirSync(`${directory}/node_modules`,{recursive:true});
 writeFileSync(`${directory}/package.json`,'{"type":"module"}');
 cpSync('dist/apps/gateway/src',`${directory}/gateway`,{recursive:true});
 cpSync(realpathSync('node_modules/zod'),`${directory}/node_modules/zod`,{recursive:true});
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
 const serviceScript=`
 import {createServer} from 'node:http';
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -33,7 +34,6 @@ const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_age
 await pool.query('CREATE SCHEMA ${schema}');
 await pool.query(${JSON.stringify(migration)});
 const user='U'+'a'.repeat(32);
-await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true)',[user]);
 const identities=new LineRepository(pool,'isolated-runtime-secret-32-bytes');
 await identities.accept('runtime',user,'runtime isolation question','message');
 const tasks=new TaskRepository(pool,'runtime-private-key-with-at-least-32-characters','2011885607-MccunYXG'),task=await tasks.claim();
@@ -65,6 +65,7 @@ try {importCredentials([{id:credentialId,name:credentialId,type:'httpHeaderAuth'
 const child=spawn('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','-e','AGENT_DB_PASSWORD','-e','RUNTIME_SERVICE_TOKEN','n8n','node',`${remote}/server.mjs`],{stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD'),RUNTIME_SERVICE_TOKEN:token}});
 let taskAuth;
 let workflow;
+let executionId;
 try {
  await new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>reject(Error('Runtime probe readiness timeout')),20000);
@@ -84,7 +85,7 @@ try {
  personal.parameters.url=search.parameters.url;personal.credentials=prepare.credentials;
  personal.parameters.jsonBody=search.parameters.jsonBody.replace("kind:'web',query:'runtime fixture'","kind:'personal',query:'schedule'");
  const complete=clone('validate');complete.parameters.url=`http://127.0.0.1:${port}/internal/v1/agent/complete`;
- complete.parameters.jsonBody="={{ JSON.stringify({taskId:$('整理訊息').first().json.taskId,lease:$('整理訊息').first().json.lease,capability:$('整理訊息').first().json.capability,output:JSON.stringify({answer:'本次取得之 runtime fixture 回答',sourceIds:['web:runtime-fixture']})}) }}";
+ complete.parameters.jsonBody="={{ JSON.stringify({taskId:$('整理訊息').first().json.taskId,lease:$('整理訊息').first().json.lease,capability:$('整理訊息').first().json.capability,output:JSON.stringify({answer:'本人校務 PRIVATE_RUNTIME_SENTINEL 與本次公開 runtime fixture 的合成整理回答',sourceIds:['web:runtime-fixture']})}) }}";
  if(googleMode)complete.parameters.jsonBody=complete.parameters.jsonBody.replace("['web:runtime-fixture']",'[]');
  complete.credentials=prepare.credentials;complete.onError='stopWorkflow';
  const memory=clone('memory');
@@ -101,13 +102,16 @@ try {
  link('測試入口',prepare.name);link(prepare.name,'整理訊息');link('整理訊息',manager.name);link(memory.name,manager.name,'ai_memory');link(manager.name,search.name);link(search.name,personal.name);link(personal.name,complete.name);
  workflow=await api('/workflows','POST',{name:'TEMP live gateway and guarded memory verification',nodes,connections,settings:{executionOrder:'v1',saveManualExecutions:true,saveDataSuccessExecution:'all',saveDataErrorExecution:'all'},pinData:{}});
  const started=await api(`/workflows/${workflow.id}/run`,'POST',{triggerToStartFrom:{name:'測試入口'}});
+ executionId=started.executionId;
  let execution;
  for(let i=0;i<120;i++) {execution=await api(`/executions/${started.executionId}`);if(['success','error','crashed','canceled'].includes(execution.status))break;await new Promise(resolve=>setTimeout(resolve,500));}
  const data=typeof execution.data==='string'?parse(execution.data):execution.data;
  assert.equal(execution.status,'success',data.resultData.error?.message??'Runtime did not finish');
  const result=data.resultData.runData[complete.name].at(-1).data.main[0][0].json.data;
  assert.equal(result.status,'queued');
- assert(!JSON.stringify(data).includes('PRIVATE_RUNTIME_SENTINEL'));
+ const privateTool=data.resultData.runData[personal.name].at(-1).data.main[0][0].json.data;
+ assert.equal(privateTool.operation,'schedule');assert.match(privateTool.ref,/^[0-9a-f-]{36}$/);
+ assert(privateTool.data.includes('PRIVATE_RUNTIME_SENTINEL'));assert.equal(privateTool.message,privateTool.data);
  if(googleMode){assert(!JSON.stringify(data).includes('GROUNDING_RUNTIME_SENTINEL'));assert.equal(data.resultData.runData[search.name].at(-1).data.main[0][0].json.data.status,'grounded_answer_ready');}
  assert.equal(data.resultData.runData[personal.name].at(-1).data.main[0][0].json.data.status,'ready');
  const nativeCount=execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-tAc',`SELECT count(*) FROM public.${table}`],{encoding:'utf8'}).trim();
@@ -116,10 +120,11 @@ try {
  const state=JSON.parse(readFileSync(`${directory}/result.json`,'utf8'));assert.equal(state.outbox.length,1);
  assert(state.outbox[0].encrypted);assert(!state.outbox[0].reply.includes('PRIVATE_RUNTIME_SENTINEL'));assert(state.privateDelivered);assert(state.citationDelivered);
  if(googleMode)assert.equal(state.groundedOwnerReadable,true);
- writeFileSync(googleMode?'docs/verification/google-search-runtime.json':'docs/verification/live-dispatch-runtime.json',JSON.stringify({recordedAt:new Date().toISOString(),executionId:started.executionId,status:'pass',n8n:'2.41.7',syntheticTestInputs:true,gateway:'actual prepare, direct search configuration and completion HTTP endpoints',memory:'native Postgres Memory insert with generation trigger',outbox:'single encrypted mixed answer; local delivery validates private template and citation; no LINE network call',gemini:'not-run',school:'synthetic school provider; native direct HTTP tool receives reference only, execution has no private sentinel',sourceLedger:googleMode?'Google grounded answer synthetic fixture; encrypted owner result and LINE link verified; no live Google call':'runtime fixture recorded and checked; Brave network mocked; no school corpus'},null,2)+'\n');
+ writeFileSync(googleMode?'docs/verification/google-search-runtime.json':'docs/verification/live-dispatch-runtime.json',JSON.stringify({recordedAt:new Date().toISOString(),executionId:started.executionId,status:'pass',n8n:'2.41.7',syntheticTestInputs:true,gateway:'actual prepare, direct search configuration and completion HTTP endpoints',memory:'native Postgres Memory insert with generation trigger',outbox:'single encrypted mixed answer; local delivery validates private template and citation; no LINE network call',gemini:'not-run',school:'synthetic school provider; actual owner-authorized HTTP tool exposes rendered owner-only data and lease-bound ref for Gemini, per explicit user approval; no live school or Gemini call',sourceLedger:googleMode?'Google grounded answer synthetic fixture; encrypted owner result and LINE link verified; no live Google call':'runtime fixture recorded and checked; Brave network mocked; no school corpus'},null,2)+'\n');
  console.log('Live gateway HTTP, guarded native Memory and durable outbox passed in n8n. No external provider calls.');
 } finally {
  if(child.exitCode===null) {const exit=new Promise(resolve=>child.once('exit',resolve));child.stdin.write('stop\n');await Promise.race([exit,new Promise(resolve=>setTimeout(resolve,5000))]);}
+ if(executionId)await api('/executions/delete','POST',{ids:[executionId]});
  if(workflow) {await api(`/workflows/${workflow.id}/archive`,'POST');await api(`/workflows/${workflow.id}`,'DELETE');}
  await api(`/credentials/${credentialId}`,'DELETE');
  execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1'],{input:`SET ROLE campus_agent; DROP TABLE IF EXISTS public.probe_memory_${unique}; DROP SCHEMA IF EXISTS ${schema} CASCADE;`,stdio:['pipe','pipe','pipe']});

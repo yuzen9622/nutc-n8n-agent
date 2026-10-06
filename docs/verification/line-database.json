@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-06T17:11:35.465Z",
+  "checkedAt": "2026-10-06T17:15:45.413Z",
   "database": true,
   "syntheticTestInputs": true,
   "checks": [
@@ -38,7 +38,7 @@
     "private tool returns only task-owner school data to Gemini with lease-bound reference",
     "private result and outbox encryption",
     "private completion binds lease and owner",
-    "private data assembled only at delivery",
+    "owner-only model answer encrypted at rest and decrypted only at delivery",
     "expired school session cancels queued private reply",
     "login notice survives repository restart",
     "login notice URL cannot be chosen by model",
