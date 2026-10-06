@@ -9,7 +9,7 @@ const loadRepository=path=>readFileSync(path,'utf8').replace("'../../utils/fault
 const repository=loadRepository('dist/apps/gateway/src/modules/line/line.repository.js');
 const taskRepository=loadRepository('dist/apps/gateway/src/modules/tasks/task.repository.js');
 const budgetRepository=loadRepository('dist/apps/gateway/src/modules/budget/budget.repository.js');
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
 const password=requiredEnv('AGENT_DB_PASSWORD');
 const script=`
 import {randomUUID} from 'node:crypto';
@@ -23,13 +23,16 @@ try {
  await pool.query('CREATE SCHEMA ${schema}');
  await pool.query(${JSON.stringify(migration)});
  const a='U'+'a'.repeat(32),b='U'+'b'.repeat(32),c='U'+'c'.repeat(32);
- await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true),($2,true),($3,false)',[a,b,c]);
+ await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true),($2,false)',[a,b]);
+ // b is a legacy invited=false row that must still work; c is a never-seen user.
  const repo=new LineRepository(pool,'test-only-session-secret-32-bytes');
  await Promise.all(Array.from({length:10},()=>repo.accept('duplicate',a,'課表','message')));
  assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks')).rows[0].n,1);
  await repo.accept('other',b,'公告','message');
- await repo.accept('denied',c,'課表','message');
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks')).rows[0].n,2);
+ await repo.accept('first-contact',c,'課表','message');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks')).rows[0].n,3);
+ assert.equal((await pool.query('SELECT revoked FROM campus_identities WHERE user_id=$1',[c])).rows[0].revoked,false);
+ await pool.query("UPDATE campus_tasks SET state='cancelled' WHERE user_id=$1",[c]);
  const oldKey=(await repo.identity(a)).sessionKey;
  await pool.query('INSERT INTO campus_conversations(session_key,user_id,generation) VALUES($1,$2,0),($3,$4,0)',[oldKey,a,(await repo.identity(b)).sessionKey,b]);
  await pool.query('INSERT INTO live_agent_chat_histories(session_id,message) VALUES($1,$3),($2,$3)',[oldKey,(await repo.identity(b)).sessionKey,JSON.stringify({type:'human',content:'測試'})]);
@@ -44,7 +47,7 @@ try {
  await repo.accept('revoke',a,'','revoke');
  await assert.rejects(repo.identity(a));
  await repo.accept('after-revoke',a,'課表','message');
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks')).rows[0].n,2);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks')).rows[0].n,3);
  const queue=new TaskRepository(pool);
  await repo.accept('b-second',b,'課表','message');
  const leases=await Promise.all([queue.claim(),queue.claim(),queue.claim()]);
@@ -80,7 +83,6 @@ try {
  await queue.prepare(webAuth,(u,g)=>repo.sessionKey(u,g));await queue.authorizeTool(webAuth);
  const source={sourceId:'web:test',url:'https://school.example.edu.tw/rules',title:'測試規章',text:'測試公開原文，不是真實校規',version:'v1',fetchedAt:new Date().toISOString(),validUntil:new Date(Date.now()+60000).toISOString(),publishedAt:null};
  await queue.recordEvidence(webAuth,[source]);
- await pool.query('UPDATE campus_identities SET invited=true WHERE user_id=$1',[c]);
  await repo.accept('other-web',c,'規章','message');
  const other=await queue.claim(),otherAuth={taskId:other.id,lease:other.lease,capability:other.capability};
  await queue.prepare(otherAuth,(u,g)=>repo.sessionKey(u,g));await queue.authorizeTool(otherAuth);
@@ -125,6 +127,10 @@ try {
  await pool.query('INSERT INTO campus_school_sessions(user_id,id,account_hash,encrypted_cookies) VALUES($1,$2,$3,$4)',[d,schoolId,'synthetic-account-hash','unused-encrypted-cookie']);
  const startPrivate=async event=>{await repo.accept(event,d,'課表','message');const task=await privateQueue.claim();assert(task);const auth={taskId:task.id,lease:task.lease,capability:task.capability};await privateQueue.prepare(auth,(u,g)=>repo.sessionKey(u,g));await privateQueue.authorizeTool(auth);return {task,auth};};
  const privateTask=await startPrivate('private-one');
+ const foreignSchoolId=randomUUID();
+ await pool.query('INSERT INTO campus_school_sessions(user_id,id,account_hash,encrypted_cookies) VALUES($1,$2,$3,$4)',[b,foreignSchoolId,'foreign-synthetic-account','unused-foreign-cookie']);
+ await assert.rejects(privateQueue.recordPersonal(privateTask.auth,'schedule',foreignSchoolId,'FORBIDDEN FOREIGN RESULT'),/SCHOOL_LOGIN_REQUIRED/);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_private_results WHERE task_id=$1',[privateTask.task.id])).rows[0].n,0);
  const handle=await privateQueue.recordPersonal(privateTask.auth,'schedule',schoolId,'PRIVATE COURSE SENTINEL');assert(!JSON.stringify(handle).includes('SENTINEL'));
  const privateRows=JSON.stringify((await pool.query('SELECT * FROM campus_private_results')).rows);assert(!privateRows.includes('SENTINEL'));
  await assert.rejects(privateQueue.recordPersonal({...privateTask.auth,lease:'12345678-1234-4234-8234-123456789013'},'schedule',schoolId,'forged'));
@@ -153,8 +159,9 @@ try {
  const resumed=(await pool.query('SELECT generation,revoked FROM campus_identities WHERE user_id=$1',[d])).rows[0];assert.equal(resumed.revoked,false);assert.equal(Number(resumed.generation),Number(beforeResume)+1);
  assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[d])).rows[0].n,0);
  assert.equal((await pool.query("SELECT count(*)::int n FROM campus_tasks WHERE event_id='explicit-resume' AND state='completed'")).rows[0].n,1);
- const uninvited='U'+'e'.repeat(32);await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,false)',[uninvited]);
- await repo.accept('uninvited-resume',uninvited,'重新啟用','resume');assert.equal((await pool.query("SELECT count(*)::int n FROM campus_inbox WHERE event_id='uninvited-resume'")).rows[0].n,0);
+ const legacyOff='U'+'e'.repeat(32);await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,false)',[legacyOff]);
+ assert.equal((await repo.identity(legacyOff)).sessionKey.startsWith('line:'),true);
+ assert.equal((await pool.query('SELECT invited FROM campus_identities WHERE user_id=$1',[legacyOff])).rows[0].invited,false);
  const ground=await startPrivate('grounded-answer');
  const groundHandle=await noticeQueue.recordGrounded(ground.auth,'<article>GROUNDING ANSWER SENTINEL</article>');
  assert(!JSON.stringify(groundHandle).includes('SENTINEL'));
@@ -173,36 +180,62 @@ try {
  await repo.accept('clear-grounded-owner',d,'','clear');
  await assert.rejects(noticeQueue.groundedResult(d,clearedGround.task.id));
  assert.equal((await pool.query('SELECT grounded_reply FROM campus_tasks WHERE id=$1',[clearedGround.task.id])).rows[0].grounded_reply,null);
- const keep='U'+'9'.repeat(32),remove='U'+'8'.repeat(32);
- await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true),($2,true)',[keep,remove]);
- for(const user of [keep,remove]){
-  await repo.accept('invite-sync-'+user,user,'PRIVATE INVITATION FIXTURE','message');
-  const task=(await pool.query('SELECT id FROM campus_tasks WHERE event_id=$1',['invite-sync-'+user])).rows[0].id;
+ const fresh=Array.from({length:6},(_,i)=>'U'+String(i+1).repeat(32));
+ const firstContact=await Promise.all(fresh.flatMap(user=>[repo.identity(user),repo.accept('first-a-'+user,user,'公開首次','message'),repo.identity(user),repo.accept('first-b-'+user,user,'公開首次','message')]));
+ assert.equal(firstContact.length,24);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_identities WHERE user_id=ANY($1::text[])',[fresh])).rows[0].n,6);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_tasks WHERE user_id=ANY($1::text[])',[fresh])).rows[0].n,12);
+ // Duplicate concurrent first contact racing a revoke must never return a revoked identity as active.
+ const racer='U'+'7'.repeat(32);
+ const raced=await Promise.allSettled([repo.accept('race-revoke',racer,'','revoke'),...Array.from({length:5},()=>repo.identity(racer))]);
+ assert.equal(raced.filter(r=>r.status==='rejected'&&!/BINDING_REVOKED/.test(String(r.reason?.message??r.reason))).length,0);
+ await assert.rejects(repo.identity(racer));
+ await repo.accept('race-after',racer,'課表','message');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM campus_tasks WHERE user_id=$1",[racer])).rows[0].n,0);
+ // Two public users keep memory, school cookies, private refs and outbox separate.
+ const [u1,u2]=fresh;
+ await pool.query("UPDATE campus_tasks SET state='cancelled' WHERE state IN ('pending','running')");
+ const fixtures={};
+ for(const user of [u1,u2]){
+  await repo.accept('iso-'+user,user,'ISOLATION','message');
+  const task=(await pool.query('SELECT id FROM campus_tasks WHERE event_id=$1',['iso-'+user])).rows[0].id;
   const key=(await repo.identity(user)).sessionKey,school=randomUUID();
   await pool.query('INSERT INTO campus_conversations(session_key,user_id,generation) VALUES($1,$2,0)',[key,user]);
-  await pool.query('INSERT INTO live_agent_chat_histories(session_id,message) VALUES($1,$2)',[key,JSON.stringify({type:'human',content:'INVITATION MEMORY'})]);
-  await pool.query('INSERT INTO campus_school_sessions(user_id,id,account_hash,encrypted_cookies) VALUES($1,$2,$3,$4)',[user,school,'account-'+user,'encrypted-fixture']);
+  await pool.query('INSERT INTO live_agent_chat_histories(session_id,message) VALUES($1,$2)',[key,JSON.stringify({type:'human',content:'MEMORY '+user})]);
+  await pool.query('INSERT INTO campus_school_sessions(user_id,id,account_hash,encrypted_cookies) VALUES($1,$2,$3,$4)',[user,school,'account-'+user,'cookie-'+user]);
   await pool.query('INSERT INTO campus_liff_sessions(token_hash,csrf_hash,user_id,generation) VALUES($1,$1,$2,0)',['token-'+user,user]);
   await pool.query("INSERT INTO campus_private_results(id,task_id,lease,operation,school_session_id,encrypted_reply) VALUES($1,$2,$3,'schedule',$4,'encrypted-fixture')",[randomUUID(),task,randomUUID(),school]);
-  await pool.query('INSERT INTO campus_outbox(id,task_id,user_id,generation,reply) VALUES($1,$2,$3,0,$4)',[randomUUID(),task,user,'UNDELIVERED INVITATION FIXTURE']);
+  await pool.query('INSERT INTO campus_outbox(id,task_id,user_id,generation,reply) VALUES($1,$2,$3,0,$4)',[randomUUID(),task,user,'OUTBOX '+user]);
+  fixtures[user]={key,task,school};
  }
- const keepKey=(await repo.identity(keep)).sessionKey;
- const synchronized=await repo.syncInvitations([keep]);assert.equal(synchronized.invited,1);assert(synchronized.removed>=1);
- assert.deepEqual((await pool.query('SELECT user_id FROM campus_identities WHERE invited')).rows.map(r=>r.user_id),[keep]);
- await assert.rejects(repo.identity(remove));assert.equal((await repo.identity(keep)).sessionKey,keepKey);
- for(const table of ['campus_school_sessions','campus_liff_sessions'])assert.equal((await pool.query('SELECT count(*)::int n FROM '+table+' WHERE user_id=$1',[remove])).rows[0].n,0);
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[keep])).rows[0].n,1);
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_private_results p JOIN campus_tasks t ON t.id=p.task_id WHERE t.user_id=$1',[remove])).rows[0].n,0);
- assert.equal((await pool.query('SELECT count(*)::int n FROM live_agent_chat_histories WHERE session_id IN (SELECT session_key FROM campus_conversations WHERE user_id=$1)',[remove])).rows[0].n,0);
- assert.equal((await pool.query('SELECT state,prompt FROM campus_tasks WHERE event_id=$1',['invite-sync-'+remove])).rows[0].state,'cancelled');
- assert.equal((await pool.query('SELECT reply FROM campus_outbox WHERE user_id=$1',[remove])).rows[0].reply,'');
- assert.equal((await repo.syncInvitations([keep])).removed,0);assert.equal((await repo.identity(keep)).sessionKey,keepKey);
- await assert.rejects(repo.syncInvitations([]));await assert.rejects(repo.syncInvitations([keep,'2011885580']));
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_identities WHERE invited')).rows[0].n,1);
- await repo.syncInvitations([keep,remove]);await assert.rejects(repo.identity(remove));
- await repo.accept('explicit-resume-after-invite',remove,'重新啟用','resume');await repo.identity(remove);
- assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[remove])).rows[0].n,0);
- console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['only exact token-only HTTP 400 and 500 release excess reservation with audit evidence','identity generation change erases grounded content immediately','grounded result owner isolation and encryption','grounded result only after completion','grounded answer cannot be replaced by outer agent','grounded result expiration and cleanup','concurrent deduplication','invitation denial','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','atomic shared provider budget','zero budget fails closed','superseded and expired evidence rejected','total budget survives daily rollover','private tool returns reference only','private result and outbox encryption','private completion binds lease and owner','private data assembled only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores invited user','resume is idempotent and rotates generation','resume never restores deleted school session','resume cannot create an invitation','invitation list is authoritative and single-user capable','removed invitation clears sessions memory and private refs','removed invitation cancels pending work without altering retained user','invitation sync is idempotent and rejects invalid or empty lists','reinvitation preserves revocation until explicit resume'],externalLine:false}));
+ assert.notEqual(fixtures[u1].key,fixtures[u2].key);
+ assert.deepEqual((await pool.query("SELECT message->>'content' c FROM live_agent_chat_histories WHERE session_id=$1",[fixtures[u1].key])).rows.map(r=>r.c),['MEMORY '+u1]);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_outbox WHERE user_id=$1 AND reply=$2',[u1,'OUTBOX '+u2])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_private_results p JOIN campus_tasks t ON t.id=p.task_id WHERE t.user_id=$1 AND p.school_session_id=$2',[u1,fixtures[u2].school])).rows[0].n,0);
+ // Revoking one user (no invitation list involved) removes only that user's data and preserves the other.
+ await repo.accept('revoke-'+u2,u2,'','revoke');
+ await assert.rejects(repo.identity(u2));
+ for(const table of ['campus_school_sessions','campus_liff_sessions'])assert.equal((await pool.query('SELECT count(*)::int n FROM '+table+' WHERE user_id=$1',[u2])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[u1])).rows[0].n,1);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_private_results p JOIN campus_tasks t ON t.id=p.task_id WHERE t.user_id=$1',[u2])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM live_agent_chat_histories WHERE session_id=$1',[fixtures[u2].key])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT reply FROM campus_outbox WHERE user_id=$1',[u2])).rows[0].reply,'');
+ assert.equal((await pool.query('SELECT count(*)::int n FROM live_agent_chat_histories WHERE session_id=$1',[fixtures[u1].key])).rows[0].n,1);
+ // Revocation is never undone by delayed follow; only an explicit resume restores consent.
+ await repo.accept('revoked-message-'+u2,u2,'課表','message');
+ assert.equal((await pool.query("SELECT count(*)::int n FROM campus_inbox WHERE event_id=$1",['revoked-message-'+u2])).rows[0].n,0);
+ await repo.accept('late-follow-'+u2,u2,'','follow');
+ await assert.rejects(repo.identity(u2));
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_inbox WHERE event_id=$1',['late-follow-'+u2])).rows[0].n,0);
+ await repo.accept('resume-'+u2,u2,'重新啟用','resume');await repo.accept('resume-'+u2,u2,'重新啟用','resume');
+ await repo.identity(u2);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM campus_tasks WHERE event_id=$1 AND state='completed'",['resume-'+u2])).rows[0].n,1);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[u2])).rows[0].n,0);
+ // Updating the deprecated invited column no longer changes authority or erases data.
+ await pool.query('UPDATE campus_identities SET invited=false WHERE user_id=$1',[u1]);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[u1])).rows[0].n,1);
+ await repo.identity(u1);
+ console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['only exact token-only HTTP 400 and 500 release excess reservation with audit evidence','identity generation change erases grounded content immediately','grounded result owner isolation and encryption','grounded result only after completion','grounded answer cannot be replaced by outer agent','grounded result expiration and cleanup','concurrent deduplication','public first-contact admission and legacy invited=false use','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','atomic shared provider budget','zero budget fails closed','superseded and expired evidence rejected','total budget survives daily rollover','private tool returns reference only','private result and outbox encryption','private completion binds lease and owner','private data assembled only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores revoked user; delayed follow cannot undo revocation','resume is idempotent and rotates generation','resume never restores deleted school session','concurrent first contact creates one identity without unique failure and never admits revoked','multiple unknown users get isolated memory, school cookies, private refs and outbox','revocation without any invitation list clears only that user','revoked user denied until explicit resume','invited column changes have no authority or cleanup effect'],externalLine:false}));
 } catch(error) {
  console.log(JSON.stringify({failed:true,name:error.name,code:error.code,message:error.message}));
  process.exitCode=1;

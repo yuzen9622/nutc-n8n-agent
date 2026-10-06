@@ -11,7 +11,7 @@ export class SchoolSessionRepository {
   const client=await this.pool.connect();try{await client.query('BEGIN');const result=await fn(client);await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
  }
  private async owner(client:PoolClient,userId:string){
-  const row=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND invited AND NOT revoked FOR SHARE',[userId]);
+  const row=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND NOT revoked FOR SHARE',[userId]);
   if(!row.rowCount)throw new SchoolError('SCHOOL_IDENTITY_DENIED');return String(row.rows[0].generation);
  }
  async beginLogin(userId:string,account:string):Promise<LoginLease>{

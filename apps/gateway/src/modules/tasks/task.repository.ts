@@ -21,7 +21,7 @@ export class TaskRepository {
   }
   async groundedResult(userId:string,taskId:string){
     const found=await this.pool.query(`SELECT t.id,t.generation,t.grounded_reply FROM campus_tasks t JOIN campus_identities i ON i.user_id=t.user_id
-      WHERE t.id=$1 AND t.user_id=$2 AND t.generation=i.generation AND i.invited AND NOT i.revoked
+      WHERE t.id=$1 AND t.user_id=$2 AND t.generation=i.generation AND NOT i.revoked
       AND t.state='completed' AND t.grounded_at>now()-interval '1 day' AND t.grounded_reply IS NOT NULL`,[taskId,userId]);
     if(!found.rowCount)throw new Fault(404,'SEARCH_RESULT_UNAVAILABLE');
     const row=found.rows[0];return this.crypt(row.grounded_reply,`grounded:${row.id}:${row.generation}`,true);
@@ -45,7 +45,7 @@ export class TaskRepository {
     if(!this.privateSecret||this.privateSecret.length<32)throw new Fault(503,'PRIVATE_KEY_REQUIRED');
     const key=createHash('sha256').update('campus-private-v1:'+this.privateSecret).digest();
     try{
-      if(open){const [iv,tag,data]=text.split('.');const cipher=createDecipheriv('aes-256-gcm',key,Buffer.from(iv!,'base64url'));cipher.setAAD(Buffer.from(context));cipher.setAuthTag(Buffer.from(tag!,'base64url'));return Buffer.concat([cipher.update(Buffer.from(data!,'base64url')),cipher.final()]).toString('utf8');}
+      if(open){const [iv,tag,data]=text.split('.');const cipher=createDecipheriv('aes-256-gcm',key,Buffer.from(iv!,'base64url'),{authTagLength:16});cipher.setAAD(Buffer.from(context));cipher.setAuthTag(Buffer.from(tag!,'base64url'));return Buffer.concat([cipher.update(Buffer.from(data!,'base64url')),cipher.final()]).toString('utf8');}
       const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);cipher.setAAD(Buffer.from(context));const data=Buffer.concat([cipher.update(text,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),data].map(v=>v.toString('base64url')).join('.');
     }catch{throw new Fault(503,'PRIVATE_RESULT_UNAVAILABLE');}
   }
@@ -79,7 +79,7 @@ export class TaskRepository {
     return this.transaction(async client => {
       // Identity is always locked first, including completion, clear and delivery.
       const owner=await client.query(`SELECT i.user_id FROM campus_identities i
-        WHERE i.invited AND NOT i.revoked
+        WHERE NOT i.revoked
         AND EXISTS(SELECT 1 FROM campus_tasks t WHERE t.user_id=i.user_id AND t.generation=i.generation AND t.state='pending' AND t.expires_at>now())
         AND NOT EXISTS(SELECT 1 FROM campus_tasks t WHERE t.user_id=i.user_id AND t.state='running')
         ORDER BY i.user_id FOR UPDATE OF i SKIP LOCKED LIMIT 1`);
@@ -98,7 +98,7 @@ export class TaskRepository {
   private async authorized(client:PoolClient,auth:TaskAuth) {
     const found=await client.query('SELECT user_id FROM campus_tasks WHERE id=$1',[auth.taskId]);
     if (!found.rowCount) throw new Fault(403,'TASK_DENIED');
-    const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND invited AND NOT revoked FOR UPDATE',[found.rows[0].user_id]);
+    const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND NOT revoked FOR UPDATE',[found.rows[0].user_id]);
     if(!owner.rowCount) throw new Fault(403,'TASK_REVOKED');
     const task=await client.query(`SELECT * FROM campus_tasks WHERE id=$1 AND lease=$2 AND capability_hash=$3 AND generation=$4
       AND state='running' AND leased_until>now() AND expires_at>now() FOR UPDATE`,
@@ -179,7 +179,7 @@ export class TaskRepository {
   }
   async fail(task:LeasedTask):Promise<void> {
     await this.transaction(async client=>{
-      const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND invited AND NOT revoked FOR UPDATE',[task.userId]);
+      const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND NOT revoked FOR UPDATE',[task.userId]);
       if(!owner.rowCount || String(owner.rows[0].generation)!==String(task.generation)) return;
       const changed=await client.query(`UPDATE campus_tasks SET state='failed',prompt='',grounded_reply=NULL,grounded_at=NULL
         WHERE id=$1 AND user_id=$2 AND generation=$3 AND lease=$4 AND state='running' RETURNING id,school_login_required`,[task.id,task.userId,task.generation,task.lease]);
@@ -192,7 +192,7 @@ export class TaskRepository {
   async complete(task:LeasedTask,reply:string,sourceIds:string[]=[]):Promise<void> {
     if (reply.length>5000) throw new Fault(422,'INVALID_REPLY');
     await this.transaction(async client => {
-      const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND invited AND NOT revoked FOR UPDATE',[task.userId]);
+      const owner=await client.query('SELECT generation FROM campus_identities WHERE user_id=$1 AND NOT revoked FOR UPDATE',[task.userId]);
       if (!owner.rowCount || String(owner.rows[0].generation)!==String(task.generation)) throw new Fault(403,'TASK_REVOKED');
       const ids=[...new Set(sourceIds)].sort();
       const sources=ids.length?await client.query(`SELECT s.source_id,s.url,s.title,s.current_version FROM campus_sources s
@@ -230,7 +230,7 @@ export class TaskRepository {
   }
   async deliverOne(send:(userId:string,reply:string,retryKey:string)=>Promise<void>):Promise<boolean> {
     return this.transaction(async client => {
-      const owner=await client.query(`SELECT i.user_id,i.generation FROM campus_identities i WHERE i.invited AND NOT i.revoked
+      const owner=await client.query(`SELECT i.user_id,i.generation FROM campus_identities i WHERE NOT i.revoked
         AND EXISTS(SELECT 1 FROM campus_outbox o WHERE o.user_id=i.user_id AND o.generation=i.generation AND o.state='pending' AND o.next_attempt_at<=now())
         ORDER BY i.user_id FOR UPDATE OF i SKIP LOCKED LIMIT 1`);
       if (!owner.rowCount) return false;
@@ -279,7 +279,7 @@ export class TaskRepository {
         INSERT INTO campus_outbox(id,task_id,user_id,generation,reply)
         SELECT gen_random_uuid(),t.id,t.user_id,t.generation,'目前無法完成查詢，請稍後再試。'
         FROM expired t JOIN campus_identities i ON i.user_id=t.user_id AND i.generation=t.generation
-        WHERE i.invited AND NOT i.revoked ON CONFLICT(task_id) DO NOTHING`);
+        WHERE NOT i.revoked ON CONFLICT(task_id) DO NOTHING`);
       await client.query("UPDATE campus_outbox SET state='failed',reply='' WHERE state IN ('pending','sending') AND created_at<now()-interval '23 hours'");
       await client.query("DELETE FROM campus_outbox WHERE created_at<now()-interval '7 days'");
       await client.query("DELETE FROM campus_tasks t WHERE created_at<now()-interval '7 days' AND NOT EXISTS(SELECT 1 FROM campus_outbox o WHERE o.task_id=t.id)");

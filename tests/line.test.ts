@@ -99,3 +99,24 @@ test('HTTP ingress verifies raw signature before JSON and waits for durable acce
   const denied=await fetch(url,{method:'POST',body:wrong,headers:{'x-line-signature':createHmac('sha256','secret').update(wrong).digest('base64')}});
   assert.equal(denied.status,403);
 });
+
+test('signed fresh one-to-one follow registers without restoring revocation; stale/group follow denied; unfollow revokes',async()=>{
+  const accepted:unknown[][]=[];
+  const service=new LineService({accept:async(...args)=>{accepted.push(args);},identity:async()=>({sessionKey:'unused'})},{verifyIdentity:async()=>user});
+  const follow=(webhookEventId:string,timestamp:number,type:'user'|'group'='user')=>({type:'follow',webhookEventId,timestamp,source:{type,userId:user}});
+  await service.receive([
+    follow('fresh',Date.now()),follow('stale',Date.now()-25*60*60*1000),follow('group',Date.now(),'group'),
+    {type:'unfollow',webhookEventId:'gone',timestamp:Date.now(),source:{type:'user',userId:user}},
+  ]);
+  assert.deepEqual(accepted,[['fresh',user,'','follow'],['gone',user,'','revoke']]);
+});
+test('many unknown LINE users are admitted without any invitation list',async()=>{
+  const accepted:string[]=[];
+  const service=new LineService({accept:async(_event,userId)=>{accepted.push(userId);},identity:async()=>({sessionKey:'unused'})},{verifyIdentity:async()=>user});
+  const ids=['1','2','3'].map(character=>`U${character.repeat(32)}`.replace(/[^U0-9a-f]/g,'0'));
+  await service.receive(ids.map((userId,index)=>({type:'message',webhookEventId:`unknown-${index}`,timestamp:Date.now(),source:{type:'user',userId},message:{type:'text',text:'課表'}})));
+  assert.deepEqual(accepted,ids);
+});
+test('repository has no invitation sync surface',()=>{
+  assert.equal('syncInvitations' in LineRepository.prototype,false);
+});

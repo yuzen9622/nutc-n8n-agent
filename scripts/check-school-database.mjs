@@ -8,8 +8,10 @@ const errorUrl=dataUrl(readFileSync(root+'utils/school-error.js','utf8'));
 const moduleUrl=name=>dataUrl(readFileSync(root+'modules/school/'+name,'utf8').replaceAll("'../../utils/school-error.js'",JSON.stringify(errorUrl)));
 const faultUrl=dataUrl(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8'));
 const bindingUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/liff/binding.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)));
+const lineRepositoryUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)));
+const lineServiceUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.service.js','utf8'));
 const schema='school_test_'+randomUUID().replaceAll('-','');
-const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(n=>readFileSync('infra/db/migrations/'+n,'utf8')).join('\n');
+const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(n=>readFileSync('infra/db/migrations/'+n,'utf8')).join('\n');
 const source=`
 import assert from 'node:assert/strict';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
@@ -17,13 +19,15 @@ const {SessionCrypto}=await import(${JSON.stringify(moduleUrl('session.crypto.js
 const {SchoolSessionRepository}=await import(${JSON.stringify(moduleUrl('session.repository.js'))});
 const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:${JSON.stringify(requiredEnv('AGENT_DB_PASSWORD'))},max:5,options:'-c search_path=${schema}'});
 const {BindingRepository}=await import(${JSON.stringify(bindingUrl)});
+const {LineRepository}=await import(${JSON.stringify(lineRepositoryUrl)});
+const {LineService}=await import(${JSON.stringify(lineServiceUrl)});
 const checks=[];
 try{
  await pool.query('CREATE SCHEMA ${schema}');await pool.query(${JSON.stringify(sql)});
  const a='U'+'a'.repeat(32),b='U'+'b'.repeat(32),c='U'+'c'.repeat(32);
- await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true),($2,true),($3,false)',[a,b,c]);
+ await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true),($2,false)',[a,b]); // b is a legacy invited=false row; c is unknown and auto-admitted by BindingRepository
  const crypto=new SessionCrypto('a'.repeat(64),'b'.repeat(64)),repo=new SchoolSessionRepository(pool,crypto);
- await assert.rejects(repo.beginLogin(c,'not-invited'),/IDENTITY_DENIED/);checks.push('invitation required before admission');
+ await assert.rejects(repo.beginLogin(c,'unknown-before-first-contact'),/IDENTITY_DENIED/);checks.push('school login still requires an established non-revoked identity');
  const concurrent=await Promise.allSettled([repo.beginLogin(a,'account-one'),repo.beginLogin(a,'account-one')]);assert.equal(concurrent.filter(r=>r.status==='fulfilled').length,1);
  const lease=concurrent.find(r=>r.status==='fulfilled').value;
  await assert.rejects(repo.beginLogin(b,'account-one'),/LOGIN_BUSY/);checks.push('singleflight by user and account across connections');
@@ -71,7 +75,21 @@ try{
  await pool.query('UPDATE campus_identities SET revoked=false WHERE user_id=$1',[a]);await pool.query('DELETE FROM campus_school_login_attempts');
  const expired=await repo.beginLogin(a,'account-one');await pool.query("UPDATE campus_school_login_jobs SET expires_at=now()-interval '1 second' WHERE id=$1",[expired.id]);await assert.rejects(repo.finishLogin(expired,'late'),/LOGIN_CANCELLED/);checks.push('expired login lease cannot publish cookies');
  const browsers=new BindingRepository(pool);
- await assert.rejects(browsers.issue(c),/INVITATION_REQUIRED/);
+ const firstContact=await Promise.all([browsers.issue(c),browsers.issue(c),browsers.issue(c)]);
+ assert.equal(firstContact.length,3);assert.equal((await pool.query('SELECT count(*)::int n FROM campus_identities WHERE user_id=$1',[c])).rows[0].n,1);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_liff_sessions WHERE user_id=$1',[c])).rows[0].n,1);checks.push('unknown LINE user can bind concurrently without unique failure and keeps one browser session');
+ const cLease=await repo.beginLogin(c,'account-c');await repo.finishLogin(cLease,'cookie-c');
+ assert.equal((await repo.session(c)).cookies,'cookie-c');
+ await assert.rejects(repo.session(b),/LOGIN_REQUIRED/);
+ await assert.rejects(repo.beginLogin(b,'account-c'),/ACCOUNT_ALREADY_BOUND/);checks.push('two owners keep separate cookies, cross-owner school query rejected and same school account cannot rebind');
+ await pool.query('UPDATE campus_identities SET revoked=true,generation=generation+1 WHERE user_id=$1',[c]);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[c])).rows[0].n,0);
+ await assert.rejects(repo.session(c),/LOGIN_REQUIRED|IDENTITY_DENIED/);await assert.rejects(browsers.issue(c),/BINDING_REVOKED/);
+ await pool.query('UPDATE campus_identities SET revoked=false,generation=generation+1 WHERE user_id=$1',[c]);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[c])).rows[0].n,0);checks.push('revoked user denied without any invitation list and resume does not restore school cookie');
+ await pool.query('UPDATE campus_identities SET invited=false WHERE user_id=$1',[a]);
+ assert.equal((await browsers.issue(a)).token.length,43);checks.push('deprecated invited column has no authority');
+ await pool.query('UPDATE campus_identities SET invited=true WHERE user_id=$1',[a]);
  const browser=await browsers.issue(a);assert.equal(await browsers.authorize(browser.token,browser.csrf),a);
  const storedBrowser=JSON.stringify((await pool.query('SELECT * FROM campus_liff_sessions')).rows);
  assert(!storedBrowser.includes(browser.token));assert(!storedBrowser.includes(browser.csrf));
@@ -81,6 +99,23 @@ try{
  await pool.query("UPDATE campus_liff_sessions SET expires_at=now()-interval '1 second'");await assert.rejects(browsers.authorize(rotated.token,rotated.csrf),/SESSION_REQUIRED/);
  const beforeClear=await browsers.issue(a);await pool.query('UPDATE campus_identities SET generation=generation+1 WHERE user_id=$1',[a]);await assert.rejects(browsers.authorize(beforeClear.token,beforeClear.csrf),/SESSION_REQUIRED/);
  const beforeRevoke=await browsers.issue(a);await pool.query('UPDATE campus_identities SET revoked=true WHERE user_id=$1',[a]);await assert.rejects(browsers.authorize(beforeRevoke.token,beforeRevoke.csrf),/SESSION_REQUIRED/);await assert.rejects(browsers.issue(a),/BINDING_REVOKED/);checks.push('LIFF expiration, clear and revocation invalidate old browser sessions');
+ const follower='U'+'d'.repeat(32),line=new LineRepository(pool,'public-follower-test-secret-32-bytes');
+ const incoming=new LineService(line,{verifyIdentity:async()=>follower});
+ const event=(type,id,timestamp=Date.now())=>({type,webhookEventId:id,timestamp,source:{type:'user',userId:follower}});
+ await incoming.receive([event('follow','first-follow')]);
+ assert.equal((await pool.query('SELECT revoked,invited FROM campus_identities WHERE user_id=$1',[follower])).rows[0].revoked,false);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM campus_tasks WHERE user_id=$1 AND state='pending'",[follower])).rows[0].n,0);
+ assert.equal((await browsers.issue(follower)).token.length,43);checks.push('new follower automatically admitted with local acknowledgement, no model task');
+ // Reverse chronological delivery: a newer unfollow arrives before older follow/redelivery.
+ await incoming.receive([event('unfollow','newer-unfollow',Date.now()-1000),event('follow','older-follow',Date.now()-5000),event('follow','duplicate-new-event-id',Date.now()-4000)]);
+ const revokedFollower=(await pool.query('SELECT generation,revoked FROM campus_identities WHERE user_id=$1',[follower])).rows[0];assert.equal(revokedFollower.revoked,true);
+ await assert.rejects(line.identity(follower),/BINDING_REVOKED/);await assert.rejects(browsers.issue(follower),/BINDING_REVOKED/);
+ await incoming.receive([event('follow','new-follow-after-revocation')]);
+ assert.equal((await pool.query('SELECT generation FROM campus_identities WHERE user_id=$1',[follower])).rows[0].generation,revokedFollower.generation);
+ await incoming.receive([{...event('message','explicit-follower-resume'),message:{type:'text',text:'重新啟用'}}]);
+ await line.identity(follower);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[follower])).rows[0].n,0);
+ checks.push('delayed/reordered follow cannot undo unfollow; only explicit resume restores revoked follower');
  console.log(JSON.stringify({checkedAt:new Date().toISOString(),status:'pass',syntheticTestInputs:true,externalSchoolCalls:false,checks}));
 }finally{await pool.query('DROP SCHEMA IF EXISTS ${schema} CASCADE');await pool.end();}
 `;

@@ -14,6 +14,10 @@ export class LineService {
       if (event.source.type !== 'user' || !event.source.userId) continue;
       if (event.type === 'unfollow') {
         await this.repository.accept(event.webhookEventId,event.source.userId,'','revoke');
+      } else if (event.type === 'follow') {
+        // Register new followers, but never let a delayed follow undo a newer revocation.
+        // Previously revoked users must explicitly send 「重新啟用」.
+        await this.repository.accept(event.webhookEventId,event.source.userId,'','follow');
       } else if (event.type === 'message' && event.message?.type === 'text' && event.message.text?.trim()) {
         const text = event.message.text.trim();
         const command = text === '清除對話' ? 'clear' : text === '解除綁定' ? 'revoke' : text === '重新啟用' ? 'resume' : 'message';

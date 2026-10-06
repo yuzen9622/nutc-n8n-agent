@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {requiredEnv} from './env.mjs';
-const names=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','008-knowledge-corpus.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql'];
+const names=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','008-knowledge-corpus.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'];
 const migrations=names.map(name=>{const content=readFileSync(`infra/db/migrations/${name}`,'utf8');return {name,checksum:createHash('sha256').update(content).digest('hex'),sql:content.replace(/^BEGIN;\s*$/gm,'').replace(/^COMMIT;\s*$/gm,'')};});
 const source=`
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';

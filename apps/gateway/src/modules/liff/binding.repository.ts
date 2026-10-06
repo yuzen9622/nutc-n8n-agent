@@ -9,12 +9,8 @@ export class BindingRepository {
    const client=await this.pool.connect();
    try{
     await client.query('BEGIN');
-    let owner=await client.query('SELECT generation,revoked,invited FROM campus_identities WHERE user_id=$1 FOR UPDATE',[userId]);
-    if(!owner.rowCount){
-     owner=await client.query('INSERT INTO campus_identities(user_id,invited,revoked,generation) VALUES($1,true,false,0) RETURNING generation,revoked,invited',[userId]);
-    }else if(!owner.rows[0].invited){
-     await client.query('UPDATE campus_identities SET invited=true WHERE user_id=$1',[userId]);
-    }
+    await client.query('INSERT INTO campus_identities(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING',[userId]);
+    const owner=await client.query('SELECT generation,revoked FROM campus_identities WHERE user_id=$1 FOR UPDATE',[userId]);
     if(owner.rows[0].revoked)throw new Fault(403,'BINDING_REVOKED');
     // One browser session per user; logging in rotates the previous browser credential.
     await client.query('DELETE FROM campus_liff_sessions WHERE user_id=$1 OR expires_at<=now()',[userId]);

@@ -16,8 +16,7 @@
     "test:line:database": "pnpm build && node scripts/check-line-database.mjs",
     "start:school": "node --env-file-if-exists=.env dist/apps/school-adapter/src/server.js",
     "test:school:database": "pnpm build && node scripts/check-school-database.mjs",
-    "db:migrate:live": "node scripts/migrate-live-database.mjs",
-    "invite:line": "pnpm build && node scripts/invite-line-users.mjs"
+    "db:migrate:live": "node scripts/migrate-live-database.mjs"
   },
   "dependencies": {
     "cheerio": "1.2.0",
