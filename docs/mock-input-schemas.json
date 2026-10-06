@@ -1,0 +1,485 @@
+{
+  "demo": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "scenario": {
+        "type": "string",
+        "enum": [
+          "public_success",
+          "public_no_source",
+          "schedule_success",
+          "absence_success",
+          "announcements_success",
+          "reauth_required",
+          "mixed_partial",
+          "provider_timeout",
+          "duplicate_event",
+          "ocr_failed",
+          "credential_invalid",
+          "knowledge_success",
+          "web_success",
+          "both_success",
+          "retrieval_retry",
+          "retrieval_exhausted",
+          "stale_knowledge",
+          "source_conflict",
+          "embedding_unavailable",
+          "unknown_intent",
+          "unknown_personal",
+          "repair_success",
+          "repair_failed",
+          "unknown_route",
+          "unknown_decision",
+          "rewrite_denied",
+          "session_expired",
+          "binding_prompt",
+          "clarify_prompt",
+          "unsupported_prompt"
+        ]
+      }
+    },
+    "required": [
+      "scenario"
+    ],
+    "additionalProperties": false
+  },
+  "empty": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "complete": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "resultRefs": {
+        "minItems": 1,
+        "maxItems": 2,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+        }
+      }
+    },
+    "required": [
+      "resultRefs"
+    ],
+    "additionalProperties": false
+  },
+  "fail": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "errorCode": {
+        "type": "string",
+        "enum": [
+          "UPSTREAM_FAILED",
+          "UNKNOWN_INTENT",
+          "WORKFLOW_FAILED"
+        ]
+      }
+    },
+    "required": [
+      "errorCode"
+    ],
+    "additionalProperties": false
+  },
+  "error": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "workflowId": {
+        "type": "string",
+        "maxLength": 100
+      },
+      "executionId": {
+        "type": "string",
+        "maxLength": 100
+      },
+      "errorCode": {
+        "type": "string",
+        "const": "WORKFLOW_FAILED"
+      }
+    },
+    "required": [
+      "workflowId",
+      "executionId",
+      "errorCode"
+    ],
+    "additionalProperties": false
+  },
+  "syncStart": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "scenario": {
+        "default": "all",
+        "type": "string",
+        "enum": [
+          "all",
+          "updated",
+          "unchanged",
+          "withdrawn",
+          "failed"
+        ]
+      }
+    },
+    "required": [
+      "scenario"
+    ],
+    "additionalProperties": false
+  },
+  "sync": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "syncRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "sourceRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "versionRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "syncRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/prepare": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "public/knowledge": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "queryRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "queryRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/search": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "queryRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "queryRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/read": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "searchRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "searchRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/collect": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "public/assess": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "evidenceRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "evidenceRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/rewrite-query": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "assessmentRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "assessmentRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/generate": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "evidenceRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "evidenceRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/validate": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "draftRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "draftRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/repair": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "draftRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "draftRef"
+    ],
+    "additionalProperties": false
+  },
+  "public/fallback": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "reasonCode": {
+        "default": "insufficient",
+        "type": "string",
+        "enum": [
+          "insufficient",
+          "clarify",
+          "invalid",
+          "unsupported",
+          "budget_exhausted"
+        ]
+      }
+    },
+    "required": [
+      "operationId",
+      "reasonCode"
+    ],
+    "additionalProperties": false
+  },
+  "public/render": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "draftRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "draftRef"
+    ],
+    "additionalProperties": false
+  },
+  "personal/check-session": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "personal/schedule": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "personal/absence": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "personal/announcements": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "personal/render": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      },
+      "dataRef": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId",
+      "dataRef"
+    ],
+    "additionalProperties": false
+  },
+  "personal/login-prompt": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  },
+  "personal/unsupported-prompt": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "operationId": {
+        "type": "string",
+        "pattern": "^[a-z]+_[a-f0-9-]{36}$"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "additionalProperties": false
+  }
+}
