@@ -9,13 +9,28 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "generate": "node scripts/generate-workflows.mjs && node scripts/generate-agent-workflows.mjs",
     "check": "pnpm typecheck && pnpm test && node scripts/check-artifacts.mjs",
-    "start:mock": "node dist/apps/mock-gateway/src/server.js"
+    "start:mock": "node dist/apps/mock-gateway/src/server.js",
+    "start:tunnel": "node scripts/start-tunnel.mjs",
+    "start:public": "node --env-file-if-exists=.env dist/apps/gateway/src/public-server.js",
+    "start:gateway": "node --env-file-if-exists=.env dist/apps/gateway/src/server.js",
+    "test:line:database": "pnpm build && node scripts/check-line-database.mjs",
+    "start:school": "node --env-file-if-exists=.env dist/apps/school-adapter/src/server.js",
+    "test:school:database": "pnpm build && node scripts/check-school-database.mjs",
+    "db:migrate:live": "node scripts/migrate-live-database.mjs",
+    "invite:line": "pnpm build && node scripts/invite-line-users.mjs"
   },
   "dependencies": {
+    "cheerio": "1.2.0",
+    "ddddocr-node": "2.3.0",
+    "ipaddr.js": "2.5.0",
+    "pdfjs-dist": "6.4.299",
+    "pg": "8.23.1",
+    "tough-cookie": "6.0.1",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "@types/pg": "8.23.1",
     "flatted": "3.3.3",
     "tsx": "4.21.0",
     "typescript": "5.9.3"
