@@ -17,6 +17,9 @@ test('LIFF endpoint preserves SDK callbacks and identity rejects cross-origin be
     assert.equal((await fetch(`${base}/liff/`)).status,200);
     assert.equal(page.status,200);assert.equal(page.headers.get('referrer-policy'),'no-referrer');
     const html=await page.text();assert(!html.includes('sensitive'));assert(html.includes('/liff/app.js'));
+    assert(html.includes('本人的校務查詢結果會提供給 Google Gemini 整理'));
+    assert(html.includes('校務登入密碼與 Cookie 不提供給模型，密碼不保存'));
+    assert(!html.includes('私人查詢結果由本地服務處理，不提供給模型'));
     assert.deepEqual(await (await fetch(`${base}/liff/config`)).json(),{liffId:'2011885607-test',endpoint:`${origin}/liff/`});
     for(const requestOrigin of [undefined,'https://untrusted.example']){
       const headers:Record<string,string>={'Content-Type':'application/json'};if(requestOrigin)headers.Origin=requestOrigin;
