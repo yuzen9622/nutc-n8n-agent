@@ -20,6 +20,9 @@ ID：`campusNativeAgentV2`，名稱「Campus AI Agent · 原生主流程」。�
 | student_schedule | httpRequestTool 4.5 | 固定課表操作，ai_tool 直接接 Agent |
 | student_absence | httpRequestTool 4.5 | 固定缺曠操作，ai_tool 直接接 Agent |
 | student_announcements | httpRequestTool 4.5 | 固定公告操作，ai_tool 直接接 Agent |
+| student_grades | httpRequestTool 4.5 | 查詢指定學年/學期成績，ai_tool 直接接 Agent |
+| student_leave | httpRequestTool 4.5 | 學生請假申請與假單查詢，ai_tool 直接接 Agent |
+| student_send_mail | httpRequestTool 4.5 | 透過學校 Webmail 寄信，ai_tool 直接接 Agent |
 | official_search | httpRequestTool 4.5 | 搜尋工具，query 由 $fromAI 提供，端點固定 |
 | 驗證結果與本地組裝 | httpRequest 4.4 | 檢查輸出與來源，再合併私人模板 |
 | 回覆 Webhook | respondToWebhook 1.5 | 回 JSON；目前 synthetic=true、delivered=false |
@@ -29,7 +32,7 @@ ID：`campusNativeAgentV2`，名稱「Campus AI Agent · 原生主流程」。�
 
 ## 工具參數與輸出
 
-學生工具不提供模型自訂 URL、帳號或 action。三顆 HTTP Request Tool 各自固定 query= schedule、absence、announcements。taskId 和 capability 固定取自「整理訊息」。Search Tool 只允許模型填公開 query，目前呼叫合成搜尋介面；正式介面已接 Gemini 官方 Google Search；官方 reader 獨立供語料匯入。
+學生工具不提供模型自訂 URL、帳號。學生 HTTP Request Tools 包括課表（schedule）、缺曠（absence）、個人公告（announcements）、指定學年成績（grades）、請假申請與紀錄（leave）、學校 Webmail 發信（send_mail）。taskId 和 capability 固定取自「整理訊息」。動態參數（如學期代碼、請假日期/節次/假別/事由、寄件收件人/主旨/內文、搜尋 query）由模型透過 `$fromAI` 填寫。Search Tool 只允許模型填公開 query，目前呼叫合成搜尋介面；正式介面已接 Gemini 官方 Google Search；官方 reader 獨立供語料匯入。
 
 PGVector 與 Chat Memory 使用 Campus Agent Postgres credential；Gemini Chat Model 與 Embeddings credential 留待使用者設定。PGVector 目前空表，沒有合成向量冒充 Gemini embeddings。記憶窗口不是保留期限，清理機制另行實作。
 
@@ -53,7 +56,14 @@ PGVector 與 Chat Memory 使用 Campus Agent Postgres credential；Gemini Chat M
 
 `campusNativeAgentLive` 由 `scripts/generate-live-agent-workflow.mjs` 產生，生成主指令一併呼叫。畫布沿用原生節點，但內部 HTTP 端點改為 `gateway:3100`，使用獨立正式 service／webhook credential、lease／capability 與 `live_agent_chat_histories`。LINE 先持久 ACK，再由 worker 派送，結果進入 outbox。
 
-正式草稿已接 Gemini 費用 proxy、有效官方語料 view 與 native observation 證據核對；學校工具透過獨立 adapter 處理。本人 LINE User ID 已由 Console 核對、單人邀請已同步，真人 LIFF 身分驗證成功；Google 搜尋付費驗收與真人學校登入驗收尚缺，保持未發布。使用者指定先限本人試用。具體可用與未完成範圍以 [實作追蹤](PHASE-2-5-IMPLEMENTATION.md) 為準。
+正式流程已接 Gemini 費用 proxy、有效官方語料 view 與 native observation 證據核對；學校工具透過獨立 adapter 處理。目前已發布且 worker 啟用，先限本人試用；Google 即時搜尋仍停用。部署與驗收範圍見 [本機 runbook](runbooks/live-local.md) 與 [實作追蹤](PHASE-2-5-IMPLEMENTATION.md)。
+
+### LINE 訊息體驗
+
+- worker 領取有效任務後呼叫 LINE 官方 loading API（60 秒、1.5 秒 request timeout），失敗不阻止 Agent；webhook ACK 不等待動畫。LINE 動畫僅支援一對一、手機正在查看的聊天室，收到回覆或到期自動消失；HTTP 202 不代表手機已顯示。
+- Agent 提示要求純文字；共用 LINE push 邊界另將常見 Markdown 轉成純文字，保留完整 URL、程式碼內容、一般底線與乘號。
+- systemMessage 每次執行用 `$now.setZone('Asia/Taipei')` 動態注入日期、星期、時間（UTC+08:00）。今天／明天以本次系統時間為準，不使用模型訓練日期或舊記憶。每週課表仍不代表假日一定上課。
+- [本輪證據](verification/line-experience-runtime.json)：固定 n8n 2.41.7 時間表達式與跨午夜實跑、editor 與官方 loading API；不冒充真人手機畫面或新模型語意問答驗收。`node scripts/check-line-experience-runtime.mjs` 僅測時鐘；`--update-live` 只更新已知本機流程的 Agent 系統提示並保留現有發布狀態、其餘節點與 credentials。
 
 ## 官方語料匯入
 

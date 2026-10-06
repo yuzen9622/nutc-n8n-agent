@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-10-06T13:19:41.941Z",
+  "status": "pass-in-tested-scope",
+  "n8n": "2.41.7",
+  "workflowId": "campusNativeAgentLive",
+  "modelCalls": "not-run",
+  "lineClientAnimation": "requires human mobile chat verification",
+  "fullProjectBuild": "blocked by pre-existing mock source deletions",
+  "verification": {
+    "redBaseline": "4 new behavioral tests failed before fixes",
+    "focused": "16/16 passed",
+    "nonMockRegression": "76/76 passed in 18 files; excluded only existing broken agent.test.ts and mock.test.ts",
+    "scopedBuild": "pnpm exec tsc -p .local/tsconfig-line-experience.json passed for gateway, school adapter and focused tests",
+    "pnpmCheckAndBuild": "both failed before/after changes: imports of previously deleted mock source files",
+    "artifactCheck": "blocked by same existing deletion of mock.router.ts",
+    "latestContainerAssertion": "plain text converter literal trailing hash and heading conversion passed after final restart; gateway healthy",
+    "independentReview": "PASS; reviewer fenced-code concern refuted by actual runnable reproduction and regression",
+    "lsp": "6 checked, 0 diagnostics; 2 confirmed clean and 4 inconclusive, not all clean",
+    "gitDiffCheck": "passed"
+  },
+  "clock": {
+    "actualExecution": true,
+    "executionId": "187",
+    "renderedTime": "2026-10-06 星期二 21:19:42",
+    "midnightRollover": true,
+    "expressionMatchesAgent": true
+  },
+  "deployment": {
+    "promptUpdated": true,
+    "versionId": "8f1d3a03-26d6-42ad-90a6-17332876c5ae",
+    "published": true,
+    "otherNodesAndConnectionsPreserved": true
+  },
+  "probeCleanup": true,
+  "gateway": {
+    "runningWorkerEnabled": true,
+    "builtLoadingWiring": true,
+    "realLineLoadingStatus": 202,
+    "recipient": "sole active owner; ID withheld",
+    "sentMessage": false,
+    "health": "healthy",
+    "priorProbe": "failed with wrong probe env variable name; corrected to loadConfig and rerun"
+  },
+  "editor": {
+    "actualBrowser": true,
+    "systemMessageExpression": true,
+    "plainTextInstruction": true,
+    "screenshot": "line-experience-editor.png"
+  }
+}
