@@ -210,7 +210,9 @@ export class TaskRepository {
       const currentTask=(await client.query('SELECT school_login_required,grounded_reply FROM campus_tasks WHERE id=$1 AND lease=$2',[task.id,task.lease])).rows[0];
       const loginNotice=currentTask?.school_login_required?this.loginMessage():'';
       const groundedNotice=currentTask?.grounded_reply&&this.liffId?'Google 搜尋與統整已完成，請開啟完整回答與來源：\nhttps://liff.line.me/'+this.liffId+'?result='+task.id:'';
-      const replyContent = reply.trim();
+      // Login URLs and independent grounded answers are trusted local results,
+      // never replaced by an outer model's credential link or invented search answer.
+      const replyContent = currentTask?.school_login_required || currentTask?.grounded_reply ? '' : reply.trim();
       const rendered = [
         replyContent ? replyContent : privateReply,
         groundedNotice,

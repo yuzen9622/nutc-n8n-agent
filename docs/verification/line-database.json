@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-06T10:08:11.744Z",
+  "checkedAt": "2026-10-06T17:11:35.465Z",
   "database": true,
   "syntheticTestInputs": true,
   "checks": [
@@ -10,7 +10,7 @@
     "grounded answer cannot be replaced by outer agent",
     "grounded result expiration and cleanup",
     "concurrent deduplication",
-    "invitation denial",
+    "public first-contact admission and legacy invited=false use",
     "user isolation",
     "memory clear",
     "generation rotation",
@@ -35,7 +35,7 @@
     "zero budget fails closed",
     "superseded and expired evidence rejected",
     "total budget survives daily rollover",
-    "private tool returns reference only",
+    "private tool returns only task-owner school data to Gemini with lease-bound reference",
     "private result and outbox encryption",
     "private completion binds lease and owner",
     "private data assembled only at delivery",
@@ -44,15 +44,14 @@
     "login notice URL cannot be chosen by model",
     "model failure retains required-login guidance",
     "revocation and lease protect login notices",
-    "only explicit resume restores invited user",
+    "only explicit resume restores revoked user; delayed follow cannot undo revocation",
     "resume is idempotent and rotates generation",
     "resume never restores deleted school session",
-    "resume cannot create an invitation",
-    "invitation list is authoritative and single-user capable",
-    "removed invitation clears sessions memory and private refs",
-    "removed invitation cancels pending work without altering retained user",
-    "invitation sync is idempotent and rejects invalid or empty lists",
-    "reinvitation preserves revocation until explicit resume"
+    "concurrent first contact creates one identity without unique failure and never admits revoked",
+    "multiple unknown users get isolated memory, school cookies, private refs and outbox",
+    "revocation without any invitation list clears only that user",
+    "revoked user denied until explicit resume",
+    "invited column changes have no authority or cleanup effect"
   ],
   "externalLine": false
 }
