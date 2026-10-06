@@ -41,3 +41,5 @@ for(const [i,name,kind,query,description] of [
 }
 save('campusNativeAgentV2','Campus AI Agent · 原生主流程',nodes,connections);
 console.log('Generated direct Agent: Gemini, Postgres memory, PGVector + embeddings, student HTTP tools and search. External credentials remain unset.');
+await import('./generate-live-agent-workflow.mjs');
+await import('./generate-knowledge-workflow.mjs');

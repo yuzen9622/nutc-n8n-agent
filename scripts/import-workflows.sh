@@ -7,5 +7,5 @@ import {readFileSync,writeFileSync} from 'node:fs';
 const workflows=[2,3,4,5,7,1,6].map(n=>JSON.parse(readFileSync(`workflows/WF-0${n}.json`)));
 writeFileSync('.local/import-workflows.json',JSON.stringify(workflows),{mode:0o644});
 JS
-docker compose -f infra/compose.yaml exec -T n8n n8n import:credentials --input=/handoff/credentials.json
-docker compose -f infra/compose.yaml exec -T n8n n8n import:workflow --input=/handoff/import-workflows.json
+node scripts/import-synthetic-credentials.mjs
+docker compose --env-file .env -f infra/compose.yaml exec -T n8n n8n import:workflow --input=/handoff/import-workflows.json

@@ -13,7 +13,7 @@ if(list.some(w=>w.id===source.id)) {
  await api(`/workflows/${source.id}`,'PATCH',{name:source.name,nodes:source.nodes,connections:source.connections,settings:source.settings,versionId:live.versionId});
 } else {
  writeFileSync('.local/import-agent-workflows.json',JSON.stringify([source]),{mode:0o644});
- execFileSync('docker',['compose','-f','infra/compose.yaml','exec','-T','n8n','n8n','import:workflow','--input=/handoff/import-agent-workflows.json'],{stdio:'inherit'});
+ execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','n8n','n8n','import:workflow','--input=/handoff/import-agent-workflows.json'],{stdio:'inherit'});
 }
 const live=await api(`/workflows/${source.id}`);assert.deepEqual(live.nodes,source.nodes);assert.deepEqual(live.connections,source.connections);
 writeFileSync('docs/verification/direct-agent-manifest.json',JSON.stringify({recordedAt:new Date().toISOString(),workflowId:source.id,versionId:live.versionId,registeredTypes:true,liveGraphMatches:true,nodeTypes:source.nodes.map(n=>({name:n.name,type:n.type,version:n.typeVersion})),externalExecution:'not-run'},null,2)+'\n');

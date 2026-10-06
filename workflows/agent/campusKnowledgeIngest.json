@@ -1,0 +1,400 @@
+{
+  "id": "campusKnowledgeIngest",
+  "name": "Campus 官方語料 · 原生 Embeddings 匯入",
+  "active": false,
+  "nodes": [
+    {
+      "id": "manual",
+      "name": "管理者手動匯入",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fetch",
+      "name": "讀取核定官方文件",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://gateway:3100/internal/v1/knowledge/prepare",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-live-service",
+          "name": "Campus live service"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "loop",
+      "name": "逐段建立向量",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "changed",
+      "name": "內容是否變更",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.needsEmbedding }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "insert",
+      "name": "暫存 PGVector",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePGVector",
+      "typeVersion": 1.3,
+      "position": [
+        1000,
+        200
+      ],
+      "parameters": {
+        "mode": "insert",
+        "tableName": "campus_knowledge_staging",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "campus-agent-postgres",
+          "name": "Campus Agent Postgres"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "embedding",
+      "name": "真實 Gemini Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        960,
+        460
+      ],
+      "parameters": {
+        "modelName": "models/gemini-embedding-001"
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "campus-live-gemini-proxy",
+          "name": "Campus Gemini budget proxy"
+        }
+      }
+    },
+    {
+      "id": "loader",
+      "name": "官方段落與來源",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        460
+      ],
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "batchId",
+                "value": "={{ $json.metadata.batchId }}"
+              },
+              {
+                "name": "chunkId",
+                "value": "={{ $json.metadata.chunkId }}"
+              },
+              {
+                "name": "sourceId",
+                "value": "={{ $json.metadata.sourceId }}"
+              },
+              {
+                "name": "url",
+                "value": "={{ $json.metadata.url }}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $json.metadata.title }}"
+              },
+              {
+                "name": "version",
+                "value": "={{ $json.metadata.version }}"
+              },
+              {
+                "name": "page",
+                "value": "={{ $json.metadata.page }}"
+              },
+              {
+                "name": "section",
+                "value": "={{ $json.metadata.section }}"
+              },
+              {
+                "name": "chunkIndex",
+                "value": "={{ $json.metadata.chunkIndex }}"
+              },
+              {
+                "name": "fetchedAt",
+                "value": "={{ $json.metadata.fetchedAt }}"
+              },
+              {
+                "name": "publishedAt",
+                "value": "={{ $json.metadata.publishedAt }}"
+              },
+              {
+                "name": "validUntil",
+                "value": "={{ $json.metadata.validUntil }}"
+              },
+              {
+                "name": "effectiveFrom",
+                "value": "={{ $json.metadata.effectiveFrom }}"
+              },
+              {
+                "name": "effectiveUntil",
+                "value": "={{ $json.metadata.effectiveUntil }}"
+              },
+              {
+                "name": "schoolType",
+                "value": "={{ $json.metadata.schoolType }}"
+              },
+              {
+                "name": "embeddingModel",
+                "value": "={{ $json.metadata.embeddingModel }}"
+              },
+              {
+                "name": "dimensions",
+                "value": "={{ $json.metadata.dimensions }}"
+              },
+              {
+                "name": "notice",
+                "value": "={{ $json.metadata.notice }}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "splitter",
+      "name": "保留已切好的段落",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        680
+      ],
+      "parameters": {
+        "chunkSize": 8000,
+        "chunkOverlap": 0,
+        "options": {}
+      }
+    },
+    {
+      "id": "publish",
+      "name": "驗證整批並原子發布",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://gateway:3100/internal/v1/knowledge/publish",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({batchId:$('讀取核定官方文件').first().json.metadata.batchId}) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-live-service",
+          "name": "Campus live service"
+        }
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "note",
+      "name": "發布規則",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -240
+      ],
+      "parameters": {
+        "content": "## 官方語料匯入\n固定核定來源 → 逐段原生 Gemini Embeddings → PGVector 暫存 → 驗證全批 → 原子發布。\n不接受任意網址；不匯入學生私人資料。僅手動啟動，所有模型用量受共用預算限制。",
+        "width": 640,
+        "height": 180
+      }
+    }
+  ],
+  "connections": {
+    "管理者手動匯入": {
+      "main": [
+        [
+          {
+            "node": "讀取核定官方文件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "讀取核定官方文件": {
+      "main": [
+        [
+          {
+            "node": "逐段建立向量",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "逐段建立向量": {
+      "main": [
+        [
+          {
+            "node": "驗證整批並原子發布",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "內容是否變更",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "內容是否變更": {
+      "main": [
+        [
+          {
+            "node": "暫存 PGVector",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "逐段建立向量",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "暫存 PGVector": {
+      "main": [
+        [
+          {
+            "node": "逐段建立向量",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "真實 Gemini Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "暫存 PGVector",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "官方段落與來源": {
+      "ai_document": [
+        [
+          {
+            "node": "暫存 PGVector",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "保留已切好的段落": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "官方段落與來源",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 300,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {}
+}

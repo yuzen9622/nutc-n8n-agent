@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 # The Compose project is dedicated to these seven workflows. Never export credentials.
 mkdir -p .local/exports
-docker compose -f infra/compose.yaml exec -T n8n n8n export:workflow --all --output=/handoff/exports/workflows.json --pretty
+docker compose --env-file .env -f infra/compose.yaml exec -T n8n n8n export:workflow --all --output=/handoff/exports/workflows.json --pretty
 node --input-type=module <<'JS'
 import {readFileSync,writeFileSync} from 'node:fs';
 const all=JSON.parse(readFileSync('.local/exports/workflows.json'));
