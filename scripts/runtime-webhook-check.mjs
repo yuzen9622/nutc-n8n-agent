@@ -1,9 +1,10 @@
+import {requiredEnv} from './env.mjs';
 import {session,base} from './n8n-client.mjs';
 import {parse} from 'flatted';
 import {readFileSync,writeFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 const api=await session();
-const token=readFileSync('.local/secrets/webhook','utf8');
+const token=requiredEnv('MOCK_WEBHOOK_TOKEN');
 const before=await api('/executions?limit=20');const known=new Set(before.results.map(x=>x.id));
 const denied=await fetch(`${base}/webhook/campus-message-v1`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});assert.equal(denied.status,403);
 const response=await fetch(`${base}/webhook/campus-message-v1`,{method:'POST',headers:{'Content-Type':'application/json','X-Campus-Webhook':token},body:JSON.stringify({taskId:'synthetic-missing-task',requestId:'synthetic-error-probe',taskCapability:'invalid',deadlineAt:new Date(Date.now()+90_000).toISOString()})});

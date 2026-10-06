@@ -34,5 +34,5 @@ try {
  const report={recordedAt:new Date().toISOString(),executionId:started.executionId,status:'pass',memory:'Native Postgres Chat Memory insert/read and session isolation passed through Memory Manager',tools:'Four direct HTTP configurations executed with fixed inputs as HTTP Request nodes; AI selection and $fromAI remain untested',gemini:'not-run',pgvectorRetrieval:'not-run-no-embedding-credential-or-corpus',reply:output(complete.name)[0].json.data};writeFileSync('docs/verification/direct-agent-runtime.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 } finally {
  await api(`/workflows/${w.id}/archive`,'POST');await api(`/workflows/${w.id}`,'DELETE');
- execFileSync('docker',['compose','-f','infra/compose.yaml','exec','-T','postgres','psql','-v','ON_ERROR_STOP=1','-U','bootstrap','-d','campus_agent'],{input:`DELETE FROM agent_chat_histories WHERE session_id IN ('${unique}-a','${unique}-b');`,stdio:['pipe','pipe','pipe']});
+ execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-v','ON_ERROR_STOP=1','-U','bootstrap','-d','campus_agent'],{input:`DELETE FROM agent_chat_histories WHERE session_id IN ('${unique}-a','${unique}-b');`,stdio:['pipe','pipe','pipe']});
 }

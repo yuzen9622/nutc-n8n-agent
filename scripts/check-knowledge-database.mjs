@@ -1,0 +1,56 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {requiredEnv} from './env.mjs';
+const schema='knowledge_test_'+randomUUID().replaceAll('-',''),url=s=>'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
+const fault=url(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8'));
+const service=url(readFileSync('dist/apps/gateway/src/modules/knowledge/knowledge.service.js','utf8').replace("import { OfficialReader } from '../search/official-reader.js';",'class OfficialReader {}').replace("import { knowledgeCatalog } from './knowledge.catalog.js';",'const knowledgeCatalog=[];').replaceAll("'../../utils/fault.js'",JSON.stringify(fault)));
+const tasks=url(readFileSync('dist/apps/gateway/src/modules/tasks/task.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(fault)));
+const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','008-knowledge-corpus.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(n=>readFileSync('infra/db/migrations/'+n,'utf8')).join('\n');
+const code=`
+import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
+import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
+const {KnowledgeService}=await import(${JSON.stringify(service)});
+const {TaskRepository}=await import(${JSON.stringify(tasks)});
+const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:process.env.AGENT_DB_PASSWORD,options:'-c search_path=${schema},public'});
+const checks=[];
+try{
+ await pool.query('CREATE SCHEMA ${schema}');await pool.query(${JSON.stringify(sql)});
+ const service=new KnowledgeService(pool);
+ const source={sourceId:'web:fixture',url:'https://student.nutc.edu.tw/test-only',title:'Synthetic SQL fixture',text:'Full official text fixture',version:'v1',fetchedAt:new Date().toISOString(),validUntil:new Date(Date.now()+86400000).toISOString(),publishedAt:null};
+ const batchId=randomUUID(),doc={text:'Only fixture chunk',metadata:{batchId,chunkId:'c1',sourceId:source.sourceId,version:'v1'}};
+ await pool.query('INSERT INTO campus_knowledge_batches(id,documents) VALUES($1,$2)',[batchId,JSON.stringify([{source,chunks:[doc]}])]);
+ await assert.rejects(service.publish(batchId),/BATCH_INCOMPLETE/);assert.equal((await pool.query('SELECT count(*)::int n FROM campus_sources')).rows[0].n,0);checks.push('incomplete batch publishes no source or chunk');
+ await assert.rejects(pool.query('INSERT INTO campus_knowledge_staging(text,metadata,embedding) VALUES($1,$2,$3)',[doc.text,doc.metadata,'[1,2,3]']),/3072/);checks.push('dimension mismatch rejected by database');
+ const vector='['+[1,...Array(3071).fill(0)].join(',')+']';
+ await pool.query('INSERT INTO campus_knowledge_staging(text,metadata,embedding) VALUES($1,$2,$3)',['tampered',doc.metadata,vector]);
+ await assert.rejects(service.publish(batchId),/CHUNK_MISMATCH/);checks.push('tampered content fails entire publication');
+ await pool.query('UPDATE campus_knowledge_staging SET text=$1',[doc.text]);await service.publish(batchId);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_knowledge_current')).rows[0].n,1);checks.push('complete batch atomically becomes visible');
+ assert.equal((await service.publish(batchId)).duplicate,true);checks.push('publish is idempotent');
+ const user='U'+'a'.repeat(32),taskId=randomUUID();
+ await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true)',[user]);
+ await pool.query("INSERT INTO campus_inbox(event_id,user_id) VALUES('knowledge-fixture',$1)",[user]);
+ await pool.query("INSERT INTO campus_tasks(id,event_id,user_id,generation,prompt) VALUES($1,'knowledge-fixture',$2,0,'fixture')",[taskId,user]);
+ const tasks=new TaskRepository(pool),task=await tasks.claim(),auth={taskId:task.id,lease:task.lease,capability:task.capability};
+ await tasks.prepare(auth,()=> 'knowledge-fixture-session');
+ const evidence={sourceId:source.sourceId,version:'v1',chunkId:'c1',text:doc.text};
+ await assert.rejects(tasks.recordKnowledgeEvidence(auth,[{...evidence,text:'forged'}]),/UNVERIFIED_KNOWLEDGE_CHUNK/);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_task_evidence')).rows[0].n,0);checks.push('forged retrieved text never enters task evidence');
+ await assert.rejects(tasks.recordKnowledgeEvidence({...auth,lease:randomUUID()},[evidence]),/TASK_DENIED/);checks.push('knowledge evidence binds current task lease');
+ await tasks.recordKnowledgeEvidence(auth,[evidence]);
+ assert.equal((await pool.query("SELECT count(*)::int n FROM campus_task_evidence WHERE operation='knowledge'")).rows[0].n,1);checks.push('exact returned corpus chunk registers knowledge evidence');
+ await tasks.complete(task,'Fixture public answer',[source.sourceId]);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_outbox_sources')).rows[0].n,1);checks.push('completion preserves verified knowledge version for delivery');
+ await pool.query("UPDATE campus_sources SET valid_until=now()-interval '1 second'");assert.equal((await pool.query('SELECT count(*)::int n FROM campus_knowledge_current')).rows[0].n,0);checks.push('expired sources excluded');
+ await pool.query("UPDATE campus_sources SET valid_until=now()+interval '1 day',state='withdrawn'");assert.equal((await pool.query('SELECT count(*)::int n FROM campus_knowledge_current')).rows[0].n,0);checks.push('withdrawn sources excluded');
+ const batch2=randomUUID(),doc2={...doc,metadata:{...doc.metadata,batchId:batch2}},source2={...source,fetchedAt:new Date(Date.now()+1000).toISOString()};
+ await pool.query('INSERT INTO campus_knowledge_batches(id,documents) VALUES($1,$2)',[batch2,JSON.stringify([{source:source2,chunks:[doc2]}])]);
+ await pool.query('INSERT INTO campus_knowledge_staging(text,metadata,embedding) VALUES($1,$2,$3)',[doc2.text,doc2.metadata,vector]);
+ await assert.rejects(service.publish(batch2),/SOURCE_WITHDRAWN/);checks.push('refresh cannot silently reactivate withdrawn source');
+ await pool.query("UPDATE campus_sources SET state='active',current_version='v2'");assert.equal((await pool.query('SELECT count(*)::int n FROM campus_knowledge_current')).rows[0].n,0);checks.push('old versions excluded immediately');
+ await pool.query("UPDATE campus_knowledge_batches SET created_at=now()-interval '31 minutes' WHERE id=$1",[batch2]);await assert.rejects(service.publish(batch2),/BATCH_EXPIRED/);checks.push('stale staging batches rejected');
+ console.log(JSON.stringify({status:'pass',checks,synthetic:true,liveCorpusModified:false}));
+}finally{await pool.query('DROP SCHEMA IF EXISTS ${schema} CASCADE');await pool.end();}
+`;
+try{const output=execFileSync('docker',['exec','-i','-e','AGENT_DB_PASSWORD','campus-phase1-n8n-1','node','--input-type=module'],{input:code,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD')}});const report=JSON.parse(output.trim());writeFileSync('docs/verification/knowledge-database.json',JSON.stringify({checkedAt:new Date().toISOString(),...report},null,2)+'\n');console.log(JSON.stringify(report,null,2));}catch(error){console.error(String(error.stderr??'').slice(-1800));throw new Error('Knowledge SQL checks failed');}

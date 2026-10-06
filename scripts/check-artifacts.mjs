@@ -28,3 +28,23 @@ console.log('Native Agent model/tool ports, child references and graph connectio
 assert.equal(Object.values(main.connections).filter(p=>p.ai_memory).length,1);
 assert.equal(Object.values(main.connections).filter(p=>p.ai_embedding).length,1);
 assert(!main.nodes.some(n=>n.type.endsWith('.toolWorkflow')));
+const live=native.find(w=>w.id==='campusNativeAgentLive');
+assert(live && !live.active);
+assert.equal(live.nodes.find(n=>n.id==='memory').parameters.tableName,'live_agent_chat_histories');
+assert.equal(live.nodes.filter(n=>n.type.endsWith('.httpRequestTool')).length,4);
+assert(!live.nodes.some(n=>n.parameters.url?.includes('mock-gateway')));
+for(const n of live.nodes.filter(n=>n.parameters.url)) {
+ assert.equal(n.credentials.httpHeaderAuth.id,'campus-live-service');
+ if(n.id!=='prepare') assert(n.parameters.jsonBody.includes('lease:'));
+}
+assert.equal(live.settings.saveDataSuccessExecution,'none');
+console.log('Live draft uses real gateway routes, isolated credentials, task leases and guarded memory.');
+// school-adapter remains independently layered and never imports gateway state.
+const schoolRoot='apps/school-adapter/src/modules/school/';
+for(const file of readdirSync(schoolRoot).filter(name=>name.endsWith('.ts'))){
+ const text=readFileSync(schoolRoot+file,'utf8');
+ assert(!/from ['"].*gateway/.test(text));
+ if(file.endsWith('.service.ts'))assert(!/from ['"].*(controller|router|node:http)/.test(text));
+ if(file.endsWith('.parse.ts'))assert(!/from ['"].*(service|client|provider|repository)\.js/.test(text));
+}
+console.log('School service and parser dependency boundaries passed.');
