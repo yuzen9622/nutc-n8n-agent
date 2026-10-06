@@ -9,9 +9,17 @@
 - 學校登入／Cookie／OCR 應在獨立 school-adapter；必須依實際學校協定實作，不猜 URL、欄位或成功條件。
 - n8n 仍使用原生 Agent、Gemini、Memory、PGVector 與直接 HTTP Tools；正式切換必須同步生成 JSON、固定 runtime 實跑及 editor 驗收。
 
-## 目前驗收狀態（2026-10-06）
+## 最新准入政策（2026-10-07）
 
-下表為現況；後續各節保留分階段歷史證據，當時的「未設定／未測試」不代表最新狀態。
+**准入程式已修改，完整驗收與部署尚未完成**：`pnpm check` 99/99 與 build 通過，school DB 25 項及固定 n8n 2.41.7 雙人原生 Memory 隔離／撤銷／臨時資源清理通過；均使用合成身分，不碰真人校務或付費 provider。LINE DB 回歸在既有 `recordPersonal` 全文回模型與原 reference-only 斷言衝突處失敗；該方法與 HEAD 相同，未放寬斷言，等待使用者決定模型資料邊界。不套用正式 migration 015 或公開重啟，直到安全驗收完成。獨立審查指出延遲 follow 可能推翻 unfollow，已改為 follow 不能解除撤銷並以實際 service/repository 的逆序事件 DB 測試覆蓋；另補強 GCM 16-byte tag 驗證，正常密文相容、短 tag 拒絕。
+
+使用者要求移除受邀名單，所有加入 LINE Bot 的使用者可自行使用並於 LIFF 登入自己的校務。後端以已驗簽的一對一事件或經驗證的 LINE ID token 自動建立身分，維持 generation／owner／lease／CSRF 與校務 session 隔離；解除綁定與 unfollow 不會因公開准入而失效。follow 只註冊新／未撤銷身分，不能解除撤銷；已撤銷者須本人精確「重新啟用」僅恢復助理，不恢復舊校務 Cookie。
+
+不再設定 `INVITED_LINE_USER_IDS` 或執行邀請腳本。LINE Login Channel 的 Published 平台狀態是另一項必要條件；目前主對話無 Console 登入狀態，已請使用者確認。後端隔離測試不能替代非開發者真人登入驗收，QA-39 保留 not-run。費用仍使用原共享硬上限，不因公開使用提高或重置。
+
+## 前次驗收狀態（2026-10-06，歷史）
+
+下表及後續分階段紀錄保留歷史證據；「僅本人／受邀」不再是目前准入政策，舊時的「未設定／未測試」也不代表最新狀態。
 
 | 範圍 | 已有證據 | 尚未完成 |
 |---|---|---|
@@ -32,9 +40,11 @@
 - 目前費用帳本累計 US$1.787719，按保守 NT$40/USD 約 NT$71.51，屬預留／結算上限而非實際帳單。共用 US$2 上限剩 US$0.212281，小於下次 chat 預留 US$0.25。NT$100 累計授權不變，未新增付費呼叫。
 - 新版 ePortal 的原生帳密／CSRF／captcha／固定學生 app SSO 已在後端實作並真正建立 AIS Cookie，不依賴第三方 callback 或匯入瀏覽器 Cookie。舊瀏覽器結構證據保留於 [eportal-browser-sso.json](verification/eportal-browser-sso.json)，本輪真工具與 LINE push 證據見 [school-live-runtime.json](verification/school-live-runtime.json)。
 
-## 目前操作限制
+## 前次操作限制（歷史）
 
-本機正式 migrations 002–012 已套用；gateway／school-adapter 健康。`campusNativeAgentLive` 未發布，`LIVE_AGENT_ENABLED=false`，Google 搜尋未啟用。n8n 的 11 個歷史合成 workflow 與其 execution、6 個合成 credentials、mock 容器及根 `.env` 的6個 mock token 已清除；預設 Compose 不含 mock。原始碼／JSON／fixture 僅留歷史回歸，不匯入正式服務。Phase 2–5 尚未達成完整真實端到端，不開放一般使用者。
+下列為當時紀錄；現行 worker 發布與預算設定以 [本機 runbook](runbooks/live-local.md) 為準，公開准入更新見上方。
+
+當時本機正式 migrations 002–012 已套用；gateway／school-adapter 健康。`campusNativeAgentLive` 未發布，`LIVE_AGENT_ENABLED=false`，Google 搜尋未啟用。n8n 的 11 個歷史合成 workflow 與其 execution、6 個合成 credentials、mock 容器及根 `.env` 的6個 mock token 已清除；預設 Compose 不含 mock。原始碼／JSON／fixture 僅留歷史回歸，不匯入正式服務。Phase 2–5 尚未達成完整真實端到端，不開放一般使用者。
 
 最新 LINE 證據：[liff-live-login.json](verification/liff-live-login.json)。本次路由修正及安全錯誤碼診斷通過 73 項測試、`pnpm check`／`pnpm build`；Cloudflare ingress validation 通過。校務錯誤診斷只記錄內部固定錯誤碼，不記錄帳密、Cookie 或校方 HTML。此診斷尚未捕捉新一輪本人綁定失敗。
 

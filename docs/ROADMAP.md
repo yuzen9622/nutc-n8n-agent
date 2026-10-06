@@ -20,7 +20,7 @@
 
 ## Phase 2
 
-LINE raw-body 驗簽、受邀資格、群組限制、輸入最小化、transaction inbox/task/outbox、快速 ACK 與可靠派送；LIFF token 驗證與綁定頁。正式 session key 由驗證身分推導，兩人隔離；多輪上下文清除、七天保留與解除綁定清理。不能只用模型指令實作身分與權限。
+LINE raw-body 驗簽、公開自動註冊（不使用受邀名單）、群組限制、輸入最小化、transaction inbox/task/outbox、快速 ACK 與可靠派送；LIFF token 驗證與本人校務綁定頁。加入好友可使用，但解除綁定／unfollow 仍撤銷；follow 不能解除既有撤銷；本人精確「重新啟用」只恢復助理，不恢復舊校務登入。正式 session key 由驗證身分推導，兩人隔離；多輪上下文清除、七天保留與解除綁定清理。不能只用模型指令實作身分與權限。
 
 ## Phase 3
 

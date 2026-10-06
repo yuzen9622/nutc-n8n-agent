@@ -1,0 +1,41 @@
+{
+  "status": "awaiting-user-decision",
+  "request": "Remove the invitation list; allow LINE Bot users to log in to their own school accounts.",
+  "sourceChanges": "public identity bootstrap, follow/resume handling, deprecated invitation guards removed, additive migration 015",
+  "verification": {
+    "pnpmCheck": { "status": "pass", "tests": 99 },
+    "pnpmBuild": "pass",
+    "schoolDatabase": { "status": "pass", "checks": 25, "syntheticTestInputs": true, "report": "school-database.json" },
+    "nativeMemory": { "status": "pass", "syntheticTestInputs": true, "report": "public-line-memory-runtime.json" },
+    "lineDatabase": {
+      "status": "failed",
+      "assertion": "assert(!JSON.stringify(handle).includes('SENTINEL'))",
+      "cause": "Existing recordPersonal returns plaintext private data/message to the model; reference-only privacy assertion fails.",
+      "recordPersonalUnchangedFromHEAD": true,
+      "methodSha256": "0e88ee07940533b511d7e0173eac184afc0799a77529ca60bc9adccfd96568ab",
+      "assertionNotRelaxed": true
+    },
+    "lsp": {
+      "pathsChecked": 4,
+      "confirmedClean": 1,
+      "unconfirmed": 3,
+      "diagnostics": 0,
+      "securityFix": "GCM decrypt now requires the existing 16-byte tag; real cipher-helper regression rejects shortened tags and wrong context."
+    }
+  },
+  "independentReview": {
+    "status": "blocking-finding-resolved",
+    "scope": "Delayed follow can no longer restore revoked users; GCM full-tag requirement is compatible and tested.",
+    "notDeploymentApproval": true,
+    "privacyBoundaryStillAwaitingUserDecision": true
+  },
+  "deployment": { "migration015Applied": false, "servicesRestarted": false },
+  "lineLoginChannel": { "id": "2011885607", "publishedStatus": "unverified", "reason": "Console redirected to LINE Business ID login; user asked to confirm Published." },
+  "budget": "Existing shared hard limit and ledger unchanged; no model, school or LINE provider calls by these tests.",
+  "pending": [
+    "User decision on restoring reference-only/private local reply assembly before public deployment.",
+    "Final verification still pending privacy decision; independent re-review resolved the delayed-follow blocking finding.",
+    "Published status confirmation and two real users' end-to-end login."
+  ],
+  "secretsRecorded": false
+}

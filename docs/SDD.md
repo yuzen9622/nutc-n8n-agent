@@ -91,7 +91,9 @@ LINE入口驗簽後以transaction寫入inbox／task並ACK，worker再派送具ta
 
 正式PGVector已有3份核定HTML／PDF、6段真實向量。completion由固定工作流轉交native observation，後端核對來源版本、chunkId及全文，綁定本次任務證據；完成與outbox派送時再次核對來源有效性。私人ref與outbox內容加密，派送前再檢查學校session。記憶中的sourceId不能冒充本次證據。
 
-受邀名單由根目錄 `.env` 的 `INVITED_LINE_USER_IDS` 管理，管理腳本原子同步名單。移除資格會輪替generation、清除登入session／私人暫存／記憶並取消未交付工作；重新加入名單不自動解除使用者先前的撤銷狀態。
+不使用受邀名單或人工批准。使用者加入 LINE Bot，經已驗簽的一對一事件或後端驗證的 LINE ID token 自動建立自己的身分；LIFF 各自登入本人校務帳號。首次並行請求以唯一鍵及身分 row lock 安全註冊。私人資料、對話記憶、task／lease／capability 仍以本人與 generation 隔離；同學號不能同時綁定兩個 LINE 身分。
+
+解除綁定或 unfollow 仍輪替 generation、刪除本人登入狀態、清除私人暫存／記憶並取消未交付工作；一般訊息或重新開 LIFF 不會復活已撤銷帳號。follow 只註冊新的／未撤銷身分，不能解除既有撤銷，避免延遲重送推翻較新的 unfollow。已撤銷者須本人精確傳送「重新啟用」，僅恢復助理使用，不恢復舊校務 Cookie。migration 015 保留 `invited` 舊欄位以相容既有 schema，但它不再控制准入、派送、Memory 或清理。公開 HTTP 輸入與身分／Origin／CSRF 契約不變；移除的是邀請限制，不是身分驗證。
 
 ## 6. 預算與錯誤
 

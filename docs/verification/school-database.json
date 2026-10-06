@@ -1,10 +1,10 @@
 {
-  "checkedAt": "2026-10-06T10:38:21.505Z",
+  "checkedAt": "2026-10-06T17:03:30.451Z",
   "status": "pass",
   "syntheticTestInputs": true,
   "externalSchoolCalls": false,
   "checks": [
-    "invitation required before admission",
+    "school login still requires an established non-revoked identity",
     "singleflight by user and account across connections",
     "encrypted durable cookies survive repository restart",
     "cross-user session and duplicate school binding rejected",
@@ -21,7 +21,13 @@
     "parallel private tools serialize cookie updates",
     "revocation atomically removes cookies and rejects late login",
     "expired login lease cannot publish cookies",
+    "unknown LINE user can bind concurrently without unique failure and keeps one browser session",
+    "two owners keep separate cookies, cross-owner school query rejected and same school account cannot rebind",
+    "revoked user denied without any invitation list and resume does not restore school cookie",
+    "deprecated invited column has no authority",
     "LIFF credentials hashed, CSRF checked and browser login rotated",
-    "LIFF expiration, clear and revocation invalidate old browser sessions"
+    "LIFF expiration, clear and revocation invalidate old browser sessions",
+    "new follower automatically admitted with local acknowledgement, no model task",
+    "delayed/reordered follow cannot undo unfollow; only explicit resume restores revoked follower"
   ]
 }

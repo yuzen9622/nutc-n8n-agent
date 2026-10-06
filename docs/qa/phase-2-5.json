@@ -337,11 +337,11 @@
     {
       "id": "QA-39",
       "category": "isolation",
-      "question": "兩位受邀學生同時查課表並追問上一題",
+      "question": "兩位已加入 LINE Bot 的學生各自登入校務，同時查課表並追問上一題",
       "expected": "Memory、session、任務、私人 ref 與 outbox 皆不串人。",
       "status": "not-run",
-      "scope": "deferred-multi-user",
-      "note": "目前只開放本人；雙真人驗收延後，不作為單人試用前置條件。合成身分隔離測試仍保留，不能視為真人驗收通過。"
+      "scope": "multi-user",
+      "note": "2026-10-07 使用者要求移除受邀名單、公開自動註冊。雙真人端到端仍未執行；合成身分的真 DB 隔離驗證不能冒充真人通過。"
     },
     {
       "id": "QA-40",

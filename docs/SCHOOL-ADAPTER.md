@@ -1,6 +1,6 @@
 # 中科大校務 adapter
 
-本服務位於 `apps/school-adapter`，與歷史 synthetic gateway 及 n8n 模型隔離。校方登入、OCR、唯讀解析、內部 HTTP API、加密持久 session 與限流已部署；真實 ePortal／AIS 登入及課表、缺曠、公告查詢已驗證。只有受邀身分、LIFF Session、Origin 與 CSRF 驗證通過的公開 `/liff/bind` 可以提交帳密；adapter 本身不對外開放，密碼不入庫。
+本服務位於 `apps/school-adapter`，與歷史 synthetic gateway 及 n8n 模型隔離。校方登入、OCR、唯讀解析、內部 HTTP API、加密持久 session 與限流已部署；真實 ePortal／AIS 登入及課表、缺曠、公告查詢已驗證。公開 `/liff/bind` 必須通過 LINE 身分、本人 LIFF Session、Origin 與 CSRF 驗證才可提交帳密；不再要求人工邀請，adapter 本身仍不對外開放，密碼不入庫。
 
 ## 協定來源
 
@@ -46,7 +46,7 @@ HTTP 層維持 router → schema/controller → service → repository/client；
 
 學校查詢明確回報session缺失、過期或失效時，Gateway保存task/lease範圍的登入提示，回覆固定LIFF連結；模型不決定登入網址。service驗證失敗不能當成學生登入過期。
 
-「解除綁定」移除學校cookie與私人待發结果。受邀本人若要恢復使用，須在助理的一對一聊天室明確傳送「重新啟用」，再於LIFF重新登入學校。此命令不能建立邀請、不恢復舊session，重送事件也不重複輪替generation。真人流程仍待受邀使用者驗收。
+「解除綁定」或 unfollow 移除學校 Cookie 與私人待發結果。已撤銷者重新加好友後仍須在助理的一對一聊天室精確傳送「重新啟用」，再於 LIFF 重新登入學校。follow 只註冊新使用者，不會解除既有撤銷，避免延遲事件推翻封鎖。不使用邀請名單；上述操作不恢復舊 session，重送事件也不重複輪替 generation。兩位真人流程仍待驗收。
 
 ## 校方登入轉址（2026-10-06）
 
