@@ -16,3 +16,15 @@ for(const f of ['SDD.md','WORKFLOWS.md','ROADMAP.md','RAG.md']) {
  const md=readFileSync(`docs/${f}`,'utf8');for(const m of md.matchAll(/\]\(([^)]+\.md)(?:#[^)]*)?\)/g)){if(!m[1].includes('://'))readFileSync(new URL(m[1],new URL(`../docs/${f}`,import.meta.url)));}
 }
 console.log('7 workflow graphs, references, fallback switches, layer boundaries and Phase 0 document links passed.');
+const nativeFiles=readdirSync('workflows/agent').filter(f=>f.endsWith('.json'));
+const native=nativeFiles.map(f=>JSON.parse(readFileSync(`workflows/agent/${f}`)));
+const nativeIds=new Set(native.map(w=>w.id));
+for(const w of native){const names=new Set(w.nodes.map(n=>n.name));for(const [source,ports]of Object.entries(w.connections)){assert(names.has(source));for(const outputs of Object.values(ports))for(const targets of outputs)for(const target of targets)assert(names.has(target.node));}for(const n of w.nodes)if(n.type.endsWith('.toolWorkflow'))assert(nativeIds.has(n.parameters.workflowId.value));}
+const main=native.find(w=>w.id==='campusNativeAgentV2');assert(main.nodes.some(n=>n.type==='@n8n/n8n-nodes-langchain.agent'));
+assert.equal(Object.values(main.connections).filter(p=>p.ai_tool).length,5);assert.equal(Object.values(main.connections).filter(p=>p.ai_languageModel).length,1);
+assert.equal(main.settings.saveDataSuccessExecution,'none');
+console.log('Native Agent model/tool ports, child references and graph connections passed.');
+
+assert.equal(Object.values(main.connections).filter(p=>p.ai_memory).length,1);
+assert.equal(Object.values(main.connections).filter(p=>p.ai_embedding).length,1);
+assert(!main.nodes.some(n=>n.type.endsWith('.toolWorkflow')));

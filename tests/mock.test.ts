@@ -71,3 +71,15 @@ test('local binding and clarification prompts produce single allowed result',asy
 test('unknown personal action produces unsupported prompt, not reauthentication',async()=>{
  const c=await task('unknown_personal');const result=await stage(c,'personal','unsupported-prompt');const done=await api(`/tasks/${c.taskId}/complete`,{resultRefs:[result.data.resultRef]},'task',c);assert.equal(done.data.outcome,'unsupported');
 });
+test('native Agent HTTP boundary validates synthetic sessions and capability ownership',async()=>{
+ const body={eventId:'native-a',scenario:'personal',session:'demo-a'};
+ assert.equal((await api('/agent/prepare',body,'demo')).status,401);
+ assert.equal((await api('/agent/prepare',{...body,session:'another-student'},'task')).status,400);
+ assert.equal((await api('/agent/prepare',{...body,password:'not-allowed'},'task')).status,400);
+ const a=(await api('/agent/prepare',body,'task')).data;
+ const b=(await api('/agent/prepare',{eventId:'native-b',scenario:'personal',session:'demo-b'},'task')).data;
+ assert.equal(a.sessionKey,'synthetic:demo-a');assert.notEqual(a.sessionKey,b.sessionKey);
+ assert.equal((await api('/agent/prepare',body,'task')).data.accepted,false);
+ assert.equal((await api('/agent/tool',{taskId:a.taskId,capability:b.capability,kind:'personal',query:'schedule'},'task')).status,403);
+ const response=await api('/agent/tool',{taskId:a.taskId,capability:a.capability,kind:'personal',query:'schedule'},'task');assert.equal(response.status,200);assert.equal(response.data.status,'prepared_locally');
+});

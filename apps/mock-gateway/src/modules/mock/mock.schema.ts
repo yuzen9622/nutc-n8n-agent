@@ -22,4 +22,8 @@ export const errorSchema = z.object({workflowId:z.string().max(100),executionId:
 export const syncStartSchema = z.object({scenario:z.enum(['all','updated','unchanged','withdrawn','failed']).default('all')}).strict();
 export const syncSchema = z.object({syncRef:ref,sourceRef:ref.optional(),versionRef:ref.optional()}).strict();
 export type Scenario = typeof scenarios[number];
-export const contractSchemas = {demo:demoSchema,empty:emptySchema,complete:completeSchema,fail:failSchema,error:errorSchema,syncStart:syncStartSchema,sync:syncSchema,...Object.fromEntries(Object.entries(stageSchemas).map(([k,v])=>[`public/${k}`,v])),...Object.fromEntries(Object.entries(personalSchemas).map(([k,v])=>[`personal/${k}`,v]))};
+const agentIdentity={taskId:z.uuid(),capability:z.uuid()};
+export const agentPrepareSchema = z.object({eventId:z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/),scenario:z.enum(['knowledge','web','personal','mixed']),session:z.enum(['demo-a','demo-b']).default('demo-a')}).strict();
+export const agentToolSchema = z.object({...agentIdentity,kind:z.enum(['knowledge','web','personal']),query:z.string().min(1).max(500)}).strict();
+export const agentCompleteSchema = z.object({...agentIdentity,output:z.string().max(6000)}).strict();
+export const contractSchemas = {'agent/prepare':agentPrepareSchema,'agent/tool':agentToolSchema,'agent/complete':agentCompleteSchema,demo:demoSchema,empty:emptySchema,complete:completeSchema,fail:failSchema,error:errorSchema,syncStart:syncStartSchema,sync:syncSchema,...Object.fromEntries(Object.entries(stageSchemas).map(([k,v])=>[`public/${k}`,v])),...Object.fromEntries(Object.entries(personalSchemas).map(([k,v])=>[`personal/${k}`,v]))};

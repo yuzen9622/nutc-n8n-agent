@@ -1,0 +1,4 @@
+# Opt-in only after configuring the user's Gemini credential.
+services:
+  n8n:
+    networks: [synthetic, management]

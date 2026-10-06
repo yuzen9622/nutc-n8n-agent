@@ -10,6 +10,9 @@ import * as schemas from './mock.schema.js';
 
 type Route = {method:string;pattern:RegExp;scope:Scope;action:string;schema:z.ZodType};
 const routes:Route[]=[
+  {method:'POST',pattern:/^\/agent\/prepare$/,scope:'task',action:'agentPrepare',schema:schemas.agentPrepareSchema},
+  {method:'POST',pattern:/^\/agent\/tool$/,scope:'task',action:'agentTool',schema:schemas.agentToolSchema},
+  {method:'POST',pattern:/^\/agent\/complete$/,scope:'task',action:'agentComplete',schema:schemas.agentCompleteSchema},
   {method:'POST',pattern:/^\/demo\/tasks$/,scope:'demo',action:'demo',schema:schemas.demoSchema},
   {method:'GET',pattern:/^\/demo\/tasks\/([^/]+)\/delivery$/,scope:'demo',action:'delivery',schema:schemas.emptySchema},
   ...Object.entries({claim:schemas.emptySchema,plan:schemas.emptySchema,complete:schemas.completeSchema,fail:schemas.failSchema}).map(([action,schema])=>({method:'POST',pattern:new RegExp(`^/tasks/([^/]+)/${action}$`),scope:'task' as const,action,schema})),
