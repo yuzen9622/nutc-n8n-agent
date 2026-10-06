@@ -73,7 +73,7 @@ PGVector 儲存核定公開文件與來源 metadata。Search Tool 已接 Gemini 
 
 每項學生功能有獨立 HTTP Request Tool：student_schedule、student_absence、student_announcements。工具端點和 action 固定；taskId／capability／使用者身分從可信前置資料映射，不由模型填寫。學校帳密僅在 LIFF 登入請求交給 school-adapter，登入 Cookie 留在後端；本地 OCR 最多三輪／30秒，密碼錯誤立即停止，結果不明不盲目重送。
 
-私人原文不提供給 Agent 或 Chat Memory。學生工具只回處理狀態，回覆階段本地組裝私人內容。公開答案與個人模板可合併顯示，但不將合併後私人文字寫回模型上下文。本人 session、資格、撤銷與結果所有權必須由後端驗證。
+2026-10-07 使用者明確核准本人校務查詢結果提供給 Google Gemini 整理。學生工具回傳經本人 session／task／lease／capability 驗證的結果與 ref，供模型組織回答；回答可能進入本人隔離的 Chat Memory（最多七天），不進共享 RAG。登入密碼與 Cookie 不提供給模型，密碼不保存。私人 ref 和待發回覆仍加密，完成／派送再次驗證本人 session 與撤銷；不能查取別人的資料。LIFF 頁面明示上述資料處理方式。未登入指引及獨立 Grounding 結果由後端固定產生，不被模型任意替換。
 
 ### 歷史本機合成契約
 

@@ -36,7 +36,7 @@ ID：`campusNativeAgentV2`，名稱「Campus AI Agent · 原生主流程」。�
 
 PGVector 與 Chat Memory 使用 Campus Agent Postgres credential；Gemini Chat Model 與 Embeddings credential 留待使用者設定。PGVector 目前空表，沒有合成向量冒充 Gemini embeddings。記憶窗口不是保留期限，清理機制另行實作。
 
-模型不得把私人原文存入 memory。工具只回私人處理狀態；最終私人模板在 Agent 之後生成。記憶中的 sourceId 不能冒充本次檢索結果。
+歷史合成流程採工具只回私人處理狀態、最終本地組裝，不把私人原文放進 memory。正式流程的資料處理契約已依 2026-10-07 使用者明確授權更新（見下方），不可混用歷史規則。記憶中的 sourceId 不能冒充本次檢索結果。
 
 ## 入口與測試
 
@@ -56,7 +56,11 @@ PGVector 與 Chat Memory 使用 Campus Agent Postgres credential；Gemini Chat M
 
 `campusNativeAgentLive` 由 `scripts/generate-live-agent-workflow.mjs` 產生，生成主指令一併呼叫。畫布沿用原生節點，但內部 HTTP 端點改為 `gateway:3100`，使用獨立正式 service／webhook credential、lease／capability 與 `live_agent_chat_histories`。LINE 先持久 ACK，再由 worker 派送，結果進入 outbox。
 
-正式流程已接 Gemini 費用 proxy、有效官方語料 view 與 native observation 證據核對；學校工具透過獨立 adapter 處理。目前已發布且 worker 啟用，先限本人試用；Google 即時搜尋仍停用。部署與驗收範圍見 [本機 runbook](runbooks/live-local.md) 與 [實作追蹤](PHASE-2-5-IMPLEMENTATION.md)。
+正式流程已接 Gemini 費用 proxy、有效官方語料 view 與 native observation 證據核對；學校工具透過獨立 adapter 處理。目前已發布且 worker 啟用；本輪依使用者要求移除人工受邀名單（部署證據見下方 runbook），Google 即時搜尋仍停用。部署與驗收範圍見 [本機 runbook](runbooks/live-local.md) 與 [實作追蹤](PHASE-2-5-IMPLEMENTATION.md)。
+
+### 正式准入與個人資料契約（2026-10-07）
+
+所有使用同一 LINE Bot 的人可經已驗簽的一對一事件或驗證過的 LINE ID token 自動建立身分，各自於 LIFF 登入本人校務；不需要邀請 ID。follow 不能解除既有 revoked，已撤銷者須精確「重新啟用」。本人校務結果已明確核准提供給 Google Gemini 整理，工具仍由後端綁定本人 task／lease／capability／school session；模型不能指定別人。登入密碼與 Cookie 不給模型，私人 ref／outbox 加密；完成及派送仍檢查本人與 session 有效性。本人對話記憶可含回答，最多七天，不與其他使用者或共享 RAG 混用。LIFF 頁顯示資料處理告知。
 
 ### LINE 訊息體驗
 

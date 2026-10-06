@@ -2,6 +2,10 @@
 
 本服務位於 `apps/school-adapter`，與歷史 synthetic gateway 及 n8n 模型隔離。校方登入、OCR、唯讀解析、內部 HTTP API、加密持久 session 與限流已部署；真實 ePortal／AIS 登入及課表、缺曠、公告查詢已驗證。公開 `/liff/bind` 必須通過 LINE 身分、本人 LIFF Session、Origin 與 CSRF 驗證才可提交帳密；不再要求人工邀請，adapter 本身仍不對外開放，密碼不入庫。
 
+## 目前個人資料處理（2026-10-07）
+
+使用者明確核准本人校務查詢結果提供給 Google Gemini 整理。adapter 仍只由 gateway 內部 token 呼叫，帳密／Cookie 不給模型；gateway 驗證本人 task／lease／school session 後，工具回傳本人結果及 ref。模型回答可進本人隔離 memory，最多七天；private ref／outbox 仍加密、完成和派送再次驗證本人 session。LIFF 顯示 Google Gemini 資料處理告知；以下 reference-only 敘述與測試紀錄保留作歷史，不代表此更新後契約。
+
 ## 協定來源
 
 沿用 SDD 所列 `/Volumes/KINGSTON/yuzen/code/nutc_student_system` 的 `b2e4d4fd033e284334d8ea055f9a6fe31dcfb8cc`。只移植課表、缺曠、公告列表的解析；不移植 Redis 密碼保存、自動重登、請假寫入、TronClass／Webmail、背景預熱。

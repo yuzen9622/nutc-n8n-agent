@@ -5,13 +5,18 @@
 
 目前 HEAD 的 LineRepository/BindingRepository 已自動建立身分，但仍有 invitation sync 管理腳本、task/school/memory 的 invited 判斷與舊 SQL 測試。根工作樹乾淨，pnpm check/build 基線通過；真 DB 腳本仍斷言舊受邀行為，必須與新契約同步並強化新用戶首次並發驗證。
 
+## 已確認資料邊界（2026-10-07 使用者回覆）
+使用者明確回覆「送gemini 然後是的」：保留私人校務结果提供 Google Gemini 整理，並確認 LINE Login Channel 為 Published（證據類型為使用者確認，非主對話 Console 讀回）。不再採舊 reference-only 契約。更新 LIFF 資料處理告知、文件與真 DB 嚴格斷言，仍驗證 owner／task／lease／school session／encrypted storage/outbox，不可只刪斷言。回答可進本人隔離 memory，不進共享 RAG，密碼及 Cookie 不送模型。
+
 ## 最小變更
 1. LineRepository 移除 syncInvitations。identity 與 accept 的首次身分建立使用 INSERT ... ON CONFLICT DO NOTHING，接著 SELECT ... FOR UPDATE 取得最新 owner；僅 revoked 控制存取，不依 invited，不更新 invited。identity 必須是 transaction，不得在 race 中返回已撤銷身分。保留清除/解除/精確重新啟用及 inbox 去重。LineService 新增 signed、fresh、一對一 follow 專用指令（固定本地啟用訊息，不啟動模型），只註冊新的／未撤銷身分；unfollow 仍 revoke。一般訊息與 follow 都不得解除 revoked，僅本人精確「重新啟用」代表重新同意。獨立審查發現舊 follow 延遲／逆序抵達會推翻 unfollow，因此撤銷後 follow 不再自動恢復。
 2. BindingRepository.issue 同樣使用 race-safe insert then lock，保留 revoked/rotation/expiry/hash；authorize 不新增任何放寬。TaskRepository 的 invited SQL 條件全部移除，保持 NOT revoked/generation 所有其他條件。SchoolSessionRepository.owner 移除 invited，但未建立身分與 revoked 仍拒絕。不改私人工具內容/模型行為。
 3. 新增 infra/db/migrations/015-public-line-access.sql，不改既有 migrations checksum，不 DROP 欄位/表，不批次 UPDATE 身分、不更動既有 revoked/session。保留 invited 欄位僅作舊 schema 相容並加 COMMENT 說明已停用。替換 memory guard 僅檢查有效 owner+generation+not revoked；替換 school revoke 僅 NEW.revoked；替換 grounded cleanup 僅 generation change/revoked。重建 school/liff/private/grounded 的 identity triggers，UPDATE OF 欄位僅 generation/revoked（school 只 revoked），不再由 invited 變更影響任何權限或清理。保留現有各清理函式、不弱化撤銷。
 4. 移除 scripts/invite-line-users.mjs 與 package.json invite:line 指令。不改 version。example 設定移除邀請 ID。實際.env 的精確 INVITED_LINE_USER_IDS 刪除由主對話處理，不輸出秘密。部署檔案若有注入 INVITED_LINE_USER_IDS 才刪該欄，主對話處理。
 5. tests/line.test.ts 補 fresh follow/unfollow/resume、group/stale follow拒絕與多位未知LINE使用者可進入之service測試，保留signature/identity expiry/forged user tests。真 DB 腳本 check-line-database/check-school-database 加入015：替換舊 invitation denial/sync 測試為新用戶自動准入、原 invited=false可用、重複首次並行建立不unique failure、兩人記憶/私人工具/ref/outbox不串人、校務兩個owner各自Cookie、跨owner school query拒絕、同學號重綁拒絕、revoked即使無名單仍被拒絕、explicit resume idempotency且不恢復school Cookie。原有 lease/source/budget/CSRF 等測試保留，勿只刪斷言求綠。不要寫入正式真人資料。
-6. 主對話追加與公開安全相關的最小加密防護：TaskRepository 的 GCM 解密明定 authTagLength=16（符合既有加密產生的完整 tag），拒絕截短 tag；新增 tests/private-crypto.test.ts 實測原 cipher helper 的正常解密、短 tag 與錯誤 context，不改私人工具全文／模型資料邊界（此項仍待使用者決策）。school DB 加入實際 LineService/Repository 逆序 unfollow→follow 的回歸，證明 follow 不解除 revoked。
+6. 主對話追加與公開安全相關的最小加密防護：TaskRepository 的 GCM 解密明定 authTagLength=16（符合既有加密產生的完整 tag），拒絕截短 tag；新增 tests/private-crypto.test.ts 實測原 cipher helper 的正常解密、短 tag 與錯誤 context，保留已核准的私人工具全文供模型整理。school DB 加入實際 LineService/Repository 逆序 unfollow→follow 的回歸，證明 follow 不解除 revoked。
+
+7. 主對話完成真 DB 契約修正後發現既有 complete 會讓模型覆盖登入指引與獨立 grounded 結果。僅在 school_login_required 或 grounded_reply 時忽略外模型 reply，以固定本人 LIFF 指引／完整結果連結回覆；一般已登入私人查詢仍採模型整理，private outbox 加密照舊。tests 原 phishing URL/grounded answer assertions 不放寬。更新 check-live-dispatch-runtime 的015、autoidentity、owner-only private data/ref assertions與own execution清理；不得讀取真人私人資料或付費呼叫。
 
 ## 實作者可改範圍
 apps/gateway/src/modules/line/{line.repository.ts,line.service.ts}; apps/gateway/src/modules/liff/binding.repository.ts; apps/gateway/src/modules/tasks/task.repository.ts; apps/school-adapter/src/modules/school/session.repository.ts; infra/db/migrations/015-public-line-access.sql; tests/line.test.ts（必要可新增 tests/public-line-access.test.ts）；scripts/check-line-database.mjs; scripts/check-school-database.mjs; scripts/invite-line-users.mjs（授權刪除）；package.json（只移除 invite:line）；.env.live.example（只邀請欄）。

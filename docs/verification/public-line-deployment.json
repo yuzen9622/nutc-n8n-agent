@@ -1,0 +1,86 @@
+{
+  "checkedAt": "2026-10-06T17:26:43.453Z",
+  "status": "pass",
+  "environment": "known local Docker campus-phase1; public Cloudflare ingress, not remote Linux",
+  "migration015ChecksumVerified": true,
+  "services": [
+    {
+      "service": "gateway",
+      "running": true,
+      "health": "healthy",
+      "startedAt": "2026-10-06T17:25:43.565601168Z"
+    },
+    {
+      "service": "school-adapter",
+      "running": true,
+      "health": "healthy",
+      "startedAt": "2026-10-06T17:25:32.761855469Z"
+    },
+    {
+      "service": "n8n",
+      "running": true,
+      "health": "healthy",
+      "startedAt": "2026-10-06T02:37:39.311445626Z"
+    },
+    {
+      "service": "postgres",
+      "running": true,
+      "health": "healthy",
+      "startedAt": "2026-10-06T02:37:40.601849376Z"
+    }
+  ],
+  "endpoints": [
+    {
+      "path": "/health/live",
+      "status": 200
+    },
+    {
+      "path": "/liff/",
+      "status": 200
+    },
+    {
+      "path": "/liff/config",
+      "status": 200
+    },
+    {
+      "path": "/internal/v1/agent/prepare",
+      "status": 404
+    },
+    {
+      "path": "/line/webhook",
+      "status": 401
+    },
+    {
+      "path": "/liff/bind",
+      "status": 401
+    },
+    {
+      "path": "/liff/identity",
+      "status": 403
+    }
+  ],
+  "privacyNoticeUpdated": true,
+  "published": {
+    "status": "user-confirmed",
+    "channelId": "2011885607",
+    "independentlyReadConsole": false
+  },
+  "workflow": {
+    "id": "campusNativeAgentLive",
+    "active": true
+  },
+  "configuration": {
+    "workerEnabled": true,
+    "searchEnabled": false,
+    "dailyBudgetMicroUsd": 6000000,
+    "totalBudgetMicroUsd": 6000000
+  },
+  "retainedData": {
+    "identityFingerprintUnchanged": true,
+    "schoolCookieFingerprintUnchanged": true,
+    "budgetLedgerUnchanged": true
+  },
+  "realSchoolOrModelTestCalls": false,
+  "realLinePushTestCalls": false,
+  "secretsRecorded": false
+}

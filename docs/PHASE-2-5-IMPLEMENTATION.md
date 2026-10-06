@@ -11,11 +11,11 @@
 
 ## 最新准入政策（2026-10-07）
 
-**准入程式已修改，完整驗收與部署尚未完成**：`pnpm check` 99/99 與 build 通過，school DB 25 項及固定 n8n 2.41.7 雙人原生 Memory 隔離／撤銷／臨時資源清理通過；均使用合成身分，不碰真人校務或付費 provider。LINE DB 回歸在既有 `recordPersonal` 全文回模型與原 reference-only 斷言衝突處失敗；該方法與 HEAD 相同，未放寬斷言，等待使用者決定模型資料邊界。不套用正式 migration 015 或公開重啟，直到安全驗收完成。獨立審查指出延遲 follow 可能推翻 unfollow，已改為 follow 不能解除撤銷並以實際 service/repository 的逆序事件 DB 測試覆蓋；另補強 GCM 16-byte tag 驗證，正常密文相容、短 tag 拒絕。
+**程式、隔離與目前服務部署驗證已通過**：`pnpm check` 99/99 與 build、LINE DB 49 項、school DB 25 項及固定 n8n 2.41.7 原生 Memory／直接 HTTP 工具／completion／加密 outbox runtime 通過；均使用合成身分，不碰真人校務或付費 provider。使用者明確回覆「送gemini 然後是的」，核准本人校務結果供 Gemini 整理並確認 Login Channel 為 Published（使用者確認，非 Console 獨立讀回）。原 reference-only 斷言依明確授權改為 exact owner-only data/ref/lease/session 驗證；DB／outbox 加密、他人 session 拒絕與撤銷檢查仍保留。獨立審查指出延遲 follow 可能推翻 unfollow，已修正並以實際 service/repository 的逆序事件 DB 測試覆蓋；GCM 16-byte tag 驗證拒絕短 tag。登入指引／獨立 Grounding 結果固定由後端產生，不被模型回覆取代。LIFF 顯示私人結果提供 Google Gemini 及本人記憶最多七天的告知。正式 migration 015 checksum 驗證、gateway／school-adapter 重建健康、公開 LIFF／授權邊界與真瀏覽器 SDK 初始化已確認；原身分／校務 Cookie／預算帳本指紋不變。證據見 [公開准入](verification/public-line-access.json)、[部署](verification/public-line-deployment.json)。
 
 使用者要求移除受邀名單，所有加入 LINE Bot 的使用者可自行使用並於 LIFF 登入自己的校務。後端以已驗簽的一對一事件或經驗證的 LINE ID token 自動建立身分，維持 generation／owner／lease／CSRF 與校務 session 隔離；解除綁定與 unfollow 不會因公開准入而失效。follow 只註冊新／未撤銷身分，不能解除撤銷；已撤銷者須本人精確「重新啟用」僅恢復助理，不恢復舊校務 Cookie。
 
-不再設定 `INVITED_LINE_USER_IDS` 或執行邀請腳本。LINE Login Channel 的 Published 平台狀態是另一項必要條件；目前主對話無 Console 登入狀態，已請使用者確認。後端隔離測試不能替代非開發者真人登入驗收，QA-39 保留 not-run。費用仍使用原共享硬上限，不因公開使用提高或重置。
+不再設定 `INVITED_LINE_USER_IDS` 或執行邀請腳本。LINE Login Channel 的 Published 平台狀態是另一項必要條件；使用者已明確確認，主對話未冒充 Console 讀回。後端隔離測試不能替代非開發者真人登入驗收，QA-39 保留 not-run。費用仍使用原共享硬上限，不因公開使用提高或重置。
 
 ## 前次驗收狀態（2026-10-06，歷史）
 

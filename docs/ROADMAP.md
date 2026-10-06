@@ -28,7 +28,7 @@ LINE raw-body 驗簽、公開自動註冊（不使用受邀名單）、群組限
 
 ## Phase 4–5
 
-獨立 school-adapter、本地OCR、三輪／30秒登入限制，不保存密碼；本人session、安全撤銷與續期。三顆 HTTP Tools 各接真實課表、缺曠、公告 API，後端持續檢查所有權。私人結果本地組裝，不回填 Gemini 或 Chat Memory；混合問題合併公開與私人回覆。
+獨立 school-adapter、本地OCR、三輪／30秒登入限制，不保存密碼；本人session、安全撤銷與續期。三顆 HTTP Tools 各接真實課表、缺曠、公告 API，後端持續檢查所有權。依 2026-10-07 使用者明確授權，經本人 session／task 驗證的私人結果供 Gemini 整理，回答可保留於本人隔離的 Chat Memory（最多七天），不進共享 RAG；登入密碼與 Cookie 不送模型。私人 ref／待發結果仍加密，派送前再次檢查本人 session，混合問題合併公開與私人回覆。
 
 ## Phase 6
 
