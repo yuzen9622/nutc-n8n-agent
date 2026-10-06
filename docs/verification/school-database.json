@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-10-06T10:38:21.505Z",
+  "status": "pass",
+  "syntheticTestInputs": true,
+  "externalSchoolCalls": false,
+  "checks": [
+    "invitation required before admission",
+    "singleflight by user and account across connections",
+    "encrypted durable cookies survive repository restart",
+    "cross-user session and duplicate school binding rejected",
+    "clear conversation preserves established school session",
+    "repeated OCR/network/parser failures do not consume password safety limit",
+    "unrecognized explicit auth rejections throttle both owner and school account",
+    "two confirmed credential rejections protect user from school lockout",
+    "confirmed credential limit follows school account across owners",
+    "password protection expires after fifteen minutes",
+    "explicit school account lock is preserved",
+    "legacy unknown failures do not invent wrong-password evidence",
+    "idle expiry clears cookies but retains school binding",
+    "absolute eight-hour expiry cannot be extended by reads",
+    "parallel private tools serialize cookie updates",
+    "revocation atomically removes cookies and rejects late login",
+    "expired login lease cannot publish cookies",
+    "LIFF credentials hashed, CSRF checked and browser login rotated",
+    "LIFF expiration, clear and revocation invalidate old browser sessions"
+  ]
+}

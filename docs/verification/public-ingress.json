@@ -1,0 +1,40 @@
+{
+  "host": "nutc-agent.yuzen.dev",
+  "tunnelId": "fc9524a7-43ef-47d4-bf18-2d0a11d954c1",
+  "checks": [
+    {
+      "path": "/liff/",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/liff/config",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/internal/v1/agent/prepare",
+      "method": "POST",
+      "status": 404
+    },
+    {
+      "path": "/providers/gemini/v1beta/models/x:generateContent",
+      "method": "POST",
+      "status": 404
+    },
+    {
+      "path": "/line/webhook",
+      "method": "POST",
+      "status": 503
+    }
+  ],
+  "browserVerified": true,
+  "browserState": "請使用受邀的 LINE 帳號登入。",
+  "lineConfigured": false,
+  "paidCalls": 0,
+  "note": "Python urllib default user agent returned Cloudflare 1010; browser and curl verified actual ingress. No Cloudflare protection changed.",
+  "liffId": "2011885607-MccunYXG",
+  "liffSdkInitialized": true,
+  "loginButtonEnabled": true,
+  "identityVerification": "pending Messaging credentials and live gateway"
+}

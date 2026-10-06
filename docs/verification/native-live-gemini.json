@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-10-06T02:42:11.459Z",
+  "executionId": "128",
+  "status": "pass",
+  "chat": "native Gemini model connected to Basic LLM Chain",
+  "embedding": "native Gemini Embeddings connected to PGVector load",
+  "corpus": "empty table; this does not prove document retrieval",
+  "credentials": "proxy credential only; real keys remain in gateway .env",
+  "budget": "all calls through durable shared reservation",
+  "privateDataSubmitted": false
+}

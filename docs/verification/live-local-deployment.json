@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-10-06T02:26:22.309Z",
+  "publicOrigin": "https://nutc-agent.yuzen.dev",
+  "localDocker": true,
+  "migrations": "002–007 applied; repeated run applied none",
+  "lineOfficialWebhookTest": {
+    "success": true,
+    "statusCode": 200
+  },
+  "publicLiffConfig": 200,
+  "internalRoutes": 404,
+  "unauthenticatedBind": 401,
+  "crossOriginIdentity": 403,
+  "workerEnabled": false,
+  "paidProviderCalls": 0,
+  "studentCredentialsSubmitted": false,
+  "containers": {
+    "gateway": "healthy",
+    "school-adapter": "healthy"
+  },
+  "deployedSchoolAnonymousSmoke": {
+    "connection": true,
+    "ocrFormat": true,
+    "elapsedMs": 3445,
+    "credentialsSubmitted": false
+  },
+  "browserLiffSdk": "initialized; login button enabled",
+  "latestRecovery": {
+    "dockerVmGiB": 48,
+    "availableGiB": 26,
+    "databaseRecoveryMode": false,
+    "services": [
+      "postgres healthy",
+      "n8n healthy",
+      "gateway healthy",
+      "school-adapter healthy"
+    ],
+    "lineWebhookRetest": 200,
+    "userExpandedVm": true
+  }
+}

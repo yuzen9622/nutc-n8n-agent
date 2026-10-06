@@ -13,7 +13,7 @@ pnpm install --frozen-lockfile
 pnpm check
 pnpm build
 node scripts/setup-secrets.mjs
-docker compose -f infra/compose.yaml up -d --build
+docker compose --env-file .env -f infra/compose.yaml up -d --build
 node scripts/n8n-client.mjs setup-owner
 sh scripts/import-workflows.sh
 node scripts/publish-workflows.mjs
@@ -60,7 +60,7 @@ WF-06：開啟 D02 編輯 `scenario`，執行手動入口。完整情境在 `tes
 WF-07：執行 K02；all fixture 順序示範 updated、unchanged、withdrawn、failed。只有 updated 會發布合成版本；failed 不發布。這不是實際 embedding 或持久化知識庫，pgvector 另行驗證：
 
 ```sh
-docker compose -f infra/compose.yaml exec -T postgres psql -U bootstrap -d campus -c "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
+docker compose --env-file .env -f infra/compose.yaml exec -T postgres psql -U bootstrap -d campus -c "SELECT extversion FROM pg_extension WHERE extname = 'vector';"
 ```
 
 HTTP Request 會替換 item，因此每顆 API 節點前後都有明確保存／回復 context 的 Edit Fields；每次子流程都 Wait for Completion，mixed 順序處理。所有 Switch 有 fallback；不採等待未啟動分支的 Merge。
@@ -69,8 +69,8 @@ HTTP Request 會替換 item，因此每顆 API 節點前後都有明確保存／
 
 ```sh
 sh scripts/export-workflows.sh
-docker compose -f infra/compose.yaml stop
-docker compose -f infra/compose.yaml start
+docker compose --env-file .env -f infra/compose.yaml stop
+docker compose --env-file .env -f infra/compose.yaml start
 ```
 
 匯出到 `.local/exports`，不匯出 credentials／執行資料。修改程式或 Compose 後用 `up -d --build`。保留 volumes 與原 encryption key；不要執行 `down -v` 作為一般排錯。DB 初始化只在空 volume 執行，部分初始化失敗要先檢查角色／DB，不盲刪資料。

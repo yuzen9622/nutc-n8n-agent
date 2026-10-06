@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-10-06T08:39:43.807Z",
+  "invitedUsers": 1,
+  "liffIdentity": "verified with real LINE account",
+  "publicEndpoints": {
+    "/liff": 200,
+    "/liff/": 200
+  },
+  "checks": {
+    "tests": 73,
+    "passed": 73,
+    "build": "passed",
+    "cloudflareIngress": "validated"
+  },
+  "schoolBinding": "attempt failed; exact cause was not recorded",
+  "anonymousSchoolPreflight": {
+    "loginTokens": true,
+    "captchaFetch": true,
+    "localOcrFiveCharacters": true
+  },
+  "pending": "Inspect new ePortal SSO after user login; real school session not established",
+  "secretsRecorded": false
+}

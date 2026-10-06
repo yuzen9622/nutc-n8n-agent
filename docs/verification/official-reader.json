@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-10-06T01:26:59.279Z",
+  "status": "pass",
+  "url": "https://developers.line.biz/en/docs/messaging-api/verify-webhook-signature/",
+  "title": "Verify webhook signature | LINE Developers",
+  "characters": 11930,
+  "contentHash": "0f0a957714a66d02141a9888d16664460f78d3ffa26d70de86b0bed57098958b",
+  "network": "real HTTPS with validated DNS",
+  "scope": "Reader transport smoke against LINE public documentation; not school corpus ingestion",
+  "brave": "not-run-no-key",
+  "school": "not-configured"
+}

@@ -6,10 +6,10 @@
 |---|---|---|
 | 0 | 原生 Agent、模型、記憶與工具設計 | 本輪同步改寫設計基線 |
 | 1 | 本機部署、原生畫布、DB 與合成介面 | 結構與本機元件驗證；真模型驗收待 credentials |
-| 2 | LINE／LIFF、身分、持久任務、多輪對話 | 未完成；目前只接受合成 scenario |
-| 3 | Gemini、PGVector 語料、Brave 公開問答 | 外部整合未完成，向量庫空表 |
-| 4 | 學校登入與本地 OCR | 未開始 |
-| 5 | 真實學生功能與混合回覆 | 直接 HTTP Tool 接線完成；業務API仍為合成 |
+| 2 | LINE／LIFF、身分、持久任務、多輪對話 | 進行中：公開 LIFF 頁／SDK 初始化及派送草稿通過驗證；web session／CSRF／綁定已部署；官方 webhook 與本人 LIFF 身分登入已驗證；真人 LINE 問答仍待驗收 |
+| 3 | Gemini、PGVector 語料、公開搜尋問答 | 真 Gemini／Embeddings／3 份官方語料（含 PDF）原生匯入與檢索已驗證；Google 官方搜尋接線已完成，付費搜尋與 40 題 QA 待驗收 |
+| 4 | 學校登入與本地 OCR | 新版 ePortal／AIS 真登入、公開綁定、加密持久 session 及三項真實校務查詢通過；新一輪真人 LIFF UI 驗收待完成 |
+| 5 | 真實學生功能與混合回覆 | 正式草稿使用 gateway；私人工具與加密本地回覆已接線，部署與真人資料驗收待完成 |
 | 6 | 隔離／成本／負載／備份與遠端試用 | 未完成；遠端停止狀態 |
 
 ## Phase 0–1
@@ -24,7 +24,7 @@ LINE raw-body 驗簽、受邀資格、群組限制、輸入最小化、transacti
 
 ## Phase 3
 
-使用者補 Gemini Chat Model／Embeddings credential，確認模型可用性與費用，套用連外設定後做真 Agent smoke。建立官方語料匯入工作流與來源清冊，維度一致性、sourceId證據驗證、版本與撤下控制；Brave adapter 與官方 reader。至少40題測試知識庫／搜尋／混合／拒答。模型、embedding、搜尋共同用量與硬限制須另實作，maxIterations不等於費用上限。
+使用者補 Gemini Chat Model／Embeddings credential，確認模型可用性與費用，套用連外設定後做真 Agent smoke。建立官方語料匯入工作流與來源清冊，維度一致性、sourceId證據驗證、版本與撤下控制；Gemini 官方 Google Search（詳見 GOOGLE-SEARCH.md）與獨立官方 reader。至少40題測試知識庫／搜尋／混合／拒答。模型、embedding、搜尋共同用量與硬限制須另實作，maxIterations不等於費用上限。
 
 ## Phase 4–5
 
@@ -39,3 +39,5 @@ LINE raw-body 驗簽、受邀資格、群組限制、輸入最小化、transacti
 [舊 Phase 1](verification/phase-1.md) 的30情境與 [舊包裝工具測試](verification/native-agent-runtime.json) 保留為歷史證據，不能證明本版直接工具、Memory 或PGVector已通過。每輪回報必須明列已跑、未跑、合成或真實、credential／資料依賴。
 
 [SDD](SDD.md) · [工作流](WORKFLOWS.md) · [RAG](RAG.md) · [本機操作](NATIVE-AGENT.md)
+
+Phase 2–5 本輪實作與尚缺設定詳見 [實作追蹤](PHASE-2-5-IMPLEMENTATION.md)。

@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-06T11:43:17.545Z",
+  "status": "pass",
+  "n8n": "2.41.7",
+  "workflow": "campusNativeAgentLive",
+  "published": true,
+  "automaticWorker": true,
+  "taskCompleted": true,
+  "realLineAccepted": true,
+  "encryptedPrivateOutbox": true,
+  "schoolSessionChecked": true,
+  "replyErased": true,
+  "verifiedPublicSources": 3,
+  "searchEnabled": false,
+  "input": "explicit administrator-created task, not a human LINE inbound event",
+  "dispatch": "actual running worker -> published production n8n webhook -> native Gemini/Memory/RAG/student tool -> completion -> actual LINE provider",
+  "budget": "existing ledger retained; authorized total/daily cap USD6 / NT300 test authorization",
+  "limits": "sole invited owner; live Google Search disabled; human LINE inbound and LIFF UI acceptance pending",
+  "cleanup": "exact operator task/outbox and uniquely marked test Memory pair removed; real identity/session/corpus and all fee records retained"
+}

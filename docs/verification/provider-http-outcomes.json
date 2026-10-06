@@ -1,0 +1,18 @@
+{
+  "checkedAt": "2026-10-06T08:17:57.184Z",
+  "migration": "011-provider-http-outcomes.sql",
+  "deployedLocalGateway": true,
+  "healthStatus": 200,
+  "checks": {
+    "unitAndContract": 73,
+    "isolatedDatabase": 50,
+    "build": "pass",
+    "secretScan": "pass"
+  },
+  "rule": "Only original upstream HTTP 400/500 token-only responses release excess reservation, retaining one microUSD; other statuses and ambiguous transport failures retain their reservation.",
+  "billingSource": "https://ai.google.dev/gemini-api/docs/billing#am-i-charged-for-failed-requests",
+  "retroactiveLedgerChanges": false,
+  "paidProviderCallsThisTurn": 0,
+  "historicalFailure": "Downstream HTTP 400 cannot prove exact upstream status because the older proxy mapped multiple statuses to 400.",
+  "googleSearch": "Not included in the token-only exemption; remains disabled pending billing bound verification."
+}

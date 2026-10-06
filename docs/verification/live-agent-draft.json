@@ -1,0 +1,12 @@
+{
+  "recordedAt": "2026-10-06T01:20:27.801Z",
+  "workflowId": "campusNativeAgentLive",
+  "versionId": "ef1d9779-faf0-43dc-90e5-b085d8f467ed",
+  "registeredTypes": true,
+  "importedGraphMatches": true,
+  "active": false,
+  "editor": "Canvas opened and inspected; native Agent/model/memory/vector/embedding/four HTTP tool connections visible",
+  "externalCalls": "not-run",
+  "modelConfiguration": "preserved from current user workflow",
+  "gateway": "not-started; LINE settings and acceptance gates pending"
+}
