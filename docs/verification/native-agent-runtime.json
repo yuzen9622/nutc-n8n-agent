@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-10-06T00:36:08.992Z",
+  "executionId": "117",
+  "status": "pass",
+  "coverage": "Real n8n child workflows and gateway; fixed harness, not AI Agent tool selection",
+  "gemini": "not-run-credential-pending",
+  "tools": [
+    "knowledge",
+    "web",
+    "personal"
+  ],
+  "reply": {
+    "synthetic": true,
+    "delivered": false,
+    "status": "validated",
+    "answer": "【合成測試】合成測試五本書",
+    "sourceIds": [
+      "synthetic-library-rules"
+    ],
+    "privateResult": "【合成測試】個人結果由本地模板呈現。"
+  }
+}

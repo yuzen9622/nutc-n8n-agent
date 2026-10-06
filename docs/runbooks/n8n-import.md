@@ -1,5 +1,7 @@
 # Phase 1：本機 n8n 合成環境
 
+> 此文件保留舊七流程的環境初始化及歷史驗收操作。新版主流程請依 [原生 Agent 操作說明](../NATIVE-AGENT.md)，不要用舊30情境測試宣稱新版 Agent 完成。
+
 此環境只有 synthetic mock，不接 LINE、學校、Gemini 或 Brave。容器重啟會清除 mock 任務；PostgreSQL 保存 n8n 設定與合成 execution，保留 24 小時。正式環境必須另建，不能拿本環境接收學生資料。
 
 ## 啟動與匯入
