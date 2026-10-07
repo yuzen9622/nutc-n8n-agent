@@ -1,5 +1,5 @@
 {
-  "name": "campus-agent-phase1",
+  "name": "campus-agent",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
@@ -7,9 +7,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
-    "generate": "node scripts/generate-workflows.mjs && node scripts/generate-agent-workflows.mjs",
+    "generate": "node scripts/generate-live-agent-workflow.mjs && node scripts/generate-knowledge-workflow.mjs",
     "check": "pnpm typecheck && pnpm test && node scripts/check-artifacts.mjs",
-    "start:mock": "node dist/apps/mock-gateway/src/server.js",
     "start:tunnel": "node scripts/start-tunnel.mjs",
     "start:public": "node --env-file-if-exists=.env dist/apps/gateway/src/public-server.js",
     "start:gateway": "node --env-file-if-exists=.env dist/apps/gateway/src/server.js",
