@@ -1,20 +1,18 @@
 import {renderGroundedAnswer} from './google-grounding.render.js';
 import {z} from 'zod';
 import {Fault} from '../../utils/fault.js';
-import type {BudgetRepository} from '../budget/budget.repository.js';
-const web=z.object({uri:z.url().refine(value=>{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password;}),title:z.string().max(2000)});
+const web=z.object({uri:z.url().refine(value=>{try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password;}catch{return false;}}),title:z.string().max(2000)});
 const responseSchema=z.object({candidates:z.array(z.object({finishReason:z.literal('STOP'),content:z.object({parts:z.array(z.object({text:z.string().max(20000).optional(),thought:z.boolean().optional()})).max(100)}),groundingMetadata:z.object({searchEntryPoint:z.object({renderedContent:z.string().min(1).max(100000)}),groundingChunks:z.array(z.object({web})).min(1).max(100),webSearchQueries:z.array(z.string().max(2000)).min(1).max(100)})})).length(1)});
 export type GroundedAnswer={answer:string;suggestionsHtml:string;sources:{uri:string;title:string}[]};
-export type GroundingConfig={key:string;model:string;maxCostMicroUsd:number};
+export type GroundingConfig={key:string;model:string};
 // This is a final grounded answer, never a URL-discovery feed for OfficialReader/RAG.
 export class GoogleGroundingProvider {
- constructor(private readonly config:GroundingConfig,private readonly budget:BudgetRepository,private readonly request:typeof fetch=fetch){
-  if(!/^models\/[a-zA-Z0-9._-]{1,100}$/.test(config.model)||!config.key)throw Error('INVALID_GROUNDING_CONFIG');
+ constructor(private readonly config:GroundingConfig,private readonly request:typeof fetch=fetch){
+  if(!/^models\/[a-zA-Z0-9._-]{1,100}$/.test(config.model)||!config.key)throw new Error('INVALID_GROUNDING_CONFIG');
  }
- async searchHtml(query:string,taskId:string){return renderGroundedAnswer(await this.search(query,taskId));}
- async search(query:string,taskId:string):Promise<GroundedAnswer>{
+ async searchHtml(query:string){return renderGroundedAnswer(await this.search(query));}
+ async search(query:string):Promise<GroundedAnswer>{
   if(!query.trim()||query.length>500)throw new Fault(400,'INVALID_SEARCH_QUERY');
-  await this.budget.reserve(taskId,'gemini',this.config.maxCostMicroUsd);
   let response:Response;
   try{response=await this.request(`https://generativelanguage.googleapis.com/v1beta/${this.config.model}:generateContent`,{
    method:'POST',redirect:'error',signal:AbortSignal.timeout(25000),headers:{'x-goog-api-key':this.config.key,'content-type':'application/json'},
@@ -27,9 +25,8 @@ export class GoogleGroundingProvider {
   try{
    const candidate=responseSchema.parse(JSON.parse(Buffer.concat(chunks).toString('utf8'))).candidates[0]!;
    const answer=candidate.content.parts.filter(part=>!part.thought).map(part=>part.text??'').join('');
-   if(!answer.trim()||answer.length>20000)throw Error('empty');
+   if(!answer.trim()||answer.length>20000)throw new Error('empty');
    return {answer,suggestionsHtml:candidate.groundingMetadata.searchEntryPoint.renderedContent,sources:candidate.groundingMetadata.groundingChunks.map(chunk=>chunk.web)};
   }catch{throw new Fault(503,'GOOGLE_SEARCH_RESPONSE_INVALID');}
-  // Keep the entire reservation: token-only settlement excludes search-query charges.
  }
 }

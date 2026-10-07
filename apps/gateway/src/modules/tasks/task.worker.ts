@@ -8,6 +8,8 @@ export interface WorkerQueue {
 }
 export class TaskWorker {
   private readonly controller=new AbortController();
+  // Stop polling on shutdown, but drain dispatched tasks under their provider timeout.
+  private readonly dispatchSignal=new AbortController().signal;
   private execution:Promise<void>|undefined;
   constructor(private readonly queue:WorkerQueue,
     private readonly dispatch:(task:LeasedTask,signal:AbortSignal)=>Promise<void>,
@@ -20,7 +22,7 @@ export class TaskWorker {
     // Only claimed/authorized tasks get an animation, never raw webhook events.
     // Await its bounded request so it cannot arrive after the actual reply.
     try { await this.startLoading?.(task.userId); } catch { this.onError(); }
-    try { await this.dispatch(task,this.controller.signal); }
+    try { await this.dispatch(task,this.dispatchSignal); }
     catch { await this.queue.fail(task); }
     return true;
   }

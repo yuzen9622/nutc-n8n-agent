@@ -21,6 +21,17 @@ test('worker treats an empty queue as idle; successful completion does not creat
   const worker=new TaskWorker({claim:async()=>claim,fail:async()=>{failed++;},deliverOne:async()=>false,cleanup:async()=>{}},async()=>{},async()=>{});
   await worker.tick();assert.equal(failed,0);claim=null;assert.equal(await worker.tick(),false);
 });
+test('shutdown drains an in-flight dispatch without aborting it or permanently failing the task',async()=>{
+ let claimed=false,claims=0,failed=0,dispatchSignal:AbortSignal|undefined;
+ let started!:()=>void,finish!:()=>void;
+ const entered=new Promise<void>(resolve=>{started=resolve;});
+ const worker=new TaskWorker({claim:async()=>{claims++;if(claimed)return null;claimed=true;return task;},fail:async()=>{failed++;},deliverOne:async()=>false,cleanup:async()=>{}},
+  async(_job,signal)=>{dispatchSignal=signal;started();await new Promise<void>((resolve,reject)=>{finish=resolve;signal.addEventListener('abort',()=>reject(new Error('shutdown abort')),{once:true});});},async()=>{});
+ worker.start();await entered;assert(dispatchSignal);
+ const before=claims,shutdown=worker.stop(),aborted=dispatchSignal.aborted;
+ finish();await shutdown;
+ assert.equal(aborted,false);assert.equal(failed,0);assert.equal(claims,before);
+});
 test('live task contract rejects client-selected users, extra fields and malformed capabilities',()=>{
   const auth={taskId:task.id,lease:task.lease,capability:task.capability};
   assert(taskAuthSchema.safeParse(auth).success);
