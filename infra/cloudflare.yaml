@@ -1,9 +1,0 @@
-# Credentials are supplied from .env as TUNNEL_CRED_CONTENTS by start:tunnel.
-tunnel: fc9524a7-43ef-47d4-bf18-2d0a11d954c1
-metrics: 127.0.0.1:20311
-loglevel: warn
-ingress:
-  - hostname: nutc-agent.yuzen.dev
-    path: ^/(liff(/.*)?|line/webhook)$
-    service: http://127.0.0.1:3101
-  - service: http_status:404

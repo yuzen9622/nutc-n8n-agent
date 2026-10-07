@@ -3,10 +3,8 @@ dist/
 tmp/pdfs/
 .local/
 .env
-infra/.env
 *.log
 .DS_Store
 
 .env.*
 !.env.example
-!.env.live.example
