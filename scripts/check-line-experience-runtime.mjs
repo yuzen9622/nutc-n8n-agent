@@ -62,6 +62,6 @@ try {
   report.status='pass-in-tested-scope';
 } finally {
   if(probe){await api(`/workflows/${probe.id}/archive`,'POST');await api(`/workflows/${probe.id}`,'DELETE');report.probeCleanup=true;}
-  writeFileSync('docs/verification/line-experience-runtime.json',JSON.stringify(report,null,2)+'\n');
+  mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/line-experience-runtime.json',JSON.stringify(report,null,2)+'\n');
 }
 console.log('Clock expression ran in local n8n with Taiwan midnight rollover; no model or LINE calls.');

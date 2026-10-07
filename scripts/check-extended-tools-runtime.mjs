@@ -53,5 +53,5 @@ const report={
  tools:toolNames,
  status:'pass',
 };
-writeFileSync('docs/verification/extended-tools-runtime.json',JSON.stringify(report,null,2)+'\n');
+mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/extended-tools-runtime.json',JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));

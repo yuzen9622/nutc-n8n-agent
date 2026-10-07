@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process';
-import {writeFileSync} from 'node:fs';
+import {writeFileSync,mkdirSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {SchoolClient} from '../dist/apps/school-adapter/src/modules/school/school.client.js';
 import {SCHOOL} from '../dist/apps/school-adapter/src/constants/school.js';
@@ -18,4 +18,4 @@ try {const code=await new LocalOcr().recognize(image,AbortSignal.timeout(25000))
  const output=execFileSync('docker',['run','--rm','-i','--network','none','--read-only','--memory','768m','--cpus','2','--cap-drop','ALL','--security-opt','no-new-privileges','--user','node','-v',`${resolve('dist')}:/app/dist:ro`,'-v',`${resolve('node_modules')}:/app/node_modules:ro`,'-w','/app',imageName,'node','--input-type=module'],{input:source,encoding:'utf8',timeout:30000,stdio:['pipe','pipe','pipe']});
  Object.assign(report,JSON.parse(output.trim()));report.status=report.fiveCharacters?'pass':'ocr-format-rejected';
 }catch(error){report.status='failed';try{const result=JSON.parse(String(error.stdout??'').trim());if(/^[A-Z_]+$/.test(result.error??''))report.code=result.error;}catch{}process.exitCode=1;}
-finally{await client.jar.removeAllCookies();report.elapsedMs=Date.now()-started;report.ocrCorrectness='not-submitted; format only';writeFileSync('docs/verification/school-ocr-linux.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));}
+finally{await client.jar.removeAllCookies();report.elapsedMs=Date.now()-started;report.ocrCorrectness='not-submitted; format only';mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/school-ocr-linux.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));}

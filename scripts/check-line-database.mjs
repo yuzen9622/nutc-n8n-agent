@@ -1,5 +1,5 @@
 import {requiredEnv} from './env.mjs';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 // Fixed, known local Compose target. Ephemeral schema only; no application migration.
@@ -8,8 +8,7 @@ const faultUrl='data:text/javascript;base64,'+Buffer.from(readFileSync('dist/app
 const loadRepository=path=>readFileSync(path,'utf8').replace("'../../utils/fault.js'",JSON.stringify(faultUrl));
 const repository=loadRepository('dist/apps/gateway/src/modules/line/line.repository.js');
 const taskRepository=loadRepository('dist/apps/gateway/src/modules/tasks/task.repository.js');
-const budgetRepository=loadRepository('dist/apps/gateway/src/modules/budget/budget.repository.js');
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(name=>readFileSync(`apps/gateway/migrations/${name}`,'utf8')).join('\n');
 const password=requiredEnv('AGENT_DB_PASSWORD');
 const script=`
 import {randomUUID} from 'node:crypto';
@@ -17,7 +16,6 @@ import assert from 'node:assert/strict';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
 const {LineRepository}=await import('data:text/javascript;base64,${Buffer.from(repository).toString('base64')}');
 const {TaskRepository}=await import('data:text/javascript;base64,${Buffer.from(taskRepository).toString('base64')}');
-const {BudgetRepository}=await import('data:text/javascript;base64,${Buffer.from(budgetRepository).toString('base64')}');
 const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:${JSON.stringify(password)},max:5,options:'-c search_path=${schema}'});
 try {
  await pool.query('CREATE SCHEMA ${schema}');
@@ -101,26 +99,8 @@ try {
  await pool.query("UPDATE campus_sources SET current_version=$2,valid_until=now()-interval '1 second' WHERE source_id=$1",[source.sourceId,source.version]);
  await assert.rejects(queue.complete(other,'expired evidence',['web:test']));
 
- const budget=new BudgetRepository(pool,100);
- const reservations=await Promise.allSettled([budget.reserve(other.id,'brave',60),budget.reserve(other.id,'embedding',60)]);
- assert.equal(reservations.filter(result=>result.status==='fulfilled').length,1);
- assert.equal((await pool.query('SELECT sum(amount_micro_usd)::int n FROM campus_usage_reservations')).rows[0].n,60);
- await assert.rejects(new BudgetRepository(pool,0).reserve(other.id,'gemini',1));
- await pool.query("UPDATE campus_usage_reservations SET created_at=now()-interval '1 day'");
- await assert.rejects(budget.reserve(other.id,'gemini',60),/TOTAL_PROVIDER_BUDGET/);
  await pool.query("UPDATE campus_tasks SET state='cancelled' WHERE state IN ('running','pending')");
  await pool.query("UPDATE campus_outbox SET state='cancelled',reply='' WHERE state='pending'");
- for(const status of [200,400,403,429,500,503]){
-  const id=await budget.reserve(null,'gemini',5);await budget.recordTokenOnlyResponse(id,status);
-  const observed=(await pool.query('SELECT upstream_status,amount_micro_usd,settlement_basis FROM campus_usage_reservations WHERE id=$1',[id])).rows[0];
-  assert.equal(observed.upstream_status,status);assert.equal(Number(observed.amount_micro_usd),[400,500].includes(status)?1:5);
-  assert.equal(observed.settlement_basis,[400,500].includes(status)?'google_token_only_http_error':null);
-  await budget.recordTokenOnlyResponse(id,400);
-  assert.equal((await pool.query('SELECT upstream_status FROM campus_usage_reservations WHERE id=$1',[id])).rows[0].upstream_status,status);
- }
- const braveOnly=await budget.reserve(null,'brave',5);await budget.recordTokenOnlyResponse(braveOnly,400);
- assert.equal(Number((await pool.query('SELECT amount_micro_usd FROM campus_usage_reservations WHERE id=$1',[braveOnly])).rows[0].amount_micro_usd),5);
- await assert.rejects(budget.recordTokenOnlyResponse(braveOnly,0));
  const privateQueue=new TaskRepository(pool,'isolated-private-key-with-at-least-32-characters');
  const d='U'+'d'.repeat(32),schoolId='12345678-1234-4234-8234-123456789012';
  await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,true)',[d]);
@@ -248,7 +228,7 @@ try {
  await pool.query('UPDATE campus_identities SET invited=false WHERE user_id=$1',[u1]);
  assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[u1])).rows[0].n,1);
  await repo.identity(u1);
- console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['only exact token-only HTTP 400 and 500 release excess reservation with audit evidence','identity generation change erases grounded content immediately','grounded result owner isolation and encryption','grounded result only after completion','grounded answer cannot be replaced by outer agent','grounded result expiration and cleanup','concurrent deduplication','public first-contact admission and legacy invited=false use','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','atomic shared provider budget','zero budget fails closed','superseded and expired evidence rejected','total budget survives daily rollover','private tool returns only task-owner school data to Gemini with lease-bound reference','private result and outbox encryption','private completion binds lease and owner','owner-only model answer encrypted at rest and decrypted only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores revoked user; delayed follow cannot undo revocation','resume is idempotent and rotates generation','resume never restores deleted school session','concurrent first contact creates one identity without unique failure and never admits revoked','multiple unknown users get isolated memory, school cookies, private refs and outbox','revocation without any invitation list clears only that user','revoked user denied until explicit resume','invited column changes have no authority or cleanup effect'],externalLine:false}));
+ console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['identity generation change erases grounded content immediately','grounded result owner isolation and encryption','grounded result only after completion','grounded answer cannot be replaced by outer agent','grounded result expiration and cleanup','concurrent deduplication','public first-contact admission and legacy invited=false use','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','superseded and expired evidence rejected','private tool returns only task-owner school data to Gemini with lease-bound reference','private result and outbox encryption','private completion binds lease and owner','owner-only model answer encrypted at rest and decrypted only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores revoked user; delayed follow cannot undo revocation','resume is idempotent and rotates generation','resume never restores deleted school session','concurrent first contact creates one identity without unique failure and never admits revoked','multiple unknown users get isolated memory, school cookies, private refs and outbox','revocation without any invitation list clears only that user','revoked user denied until explicit resume','invited column changes have no authority or cleanup effect'],externalLine:false}));
 } catch(error) {
  console.log(JSON.stringify({failed:true,name:error.name,code:error.code,message:error.message}));
  process.exitCode=1;
@@ -258,9 +238,9 @@ try {
 }
 `;
 try {
- const output=execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','n8n','node','--input-type=module'],{input:script,encoding:'utf8',stdio:['pipe','pipe','pipe']});
+ const output=execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','n8n','node','--input-type=module'],{input:script,encoding:'utf8',stdio:['pipe','pipe','pipe']});
  const result={checkedAt:new Date().toISOString(),...JSON.parse(output.trim())};
- writeFileSync('docs/verification/line-database.json',JSON.stringify(result,null,2)+'\n');
+ mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/line-database.json',JSON.stringify(result,null,2)+'\n');
  console.log(JSON.stringify(result,null,2));
 } catch(error) {
  const output=String(error.stdout??'').trim();

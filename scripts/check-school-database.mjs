@@ -1,4 +1,4 @@
-import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {requiredEnv} from './env.mjs';
@@ -11,7 +11,7 @@ const bindingUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/liff/bindin
 const lineRepositoryUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)));
 const lineServiceUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.service.js','utf8'));
 const schema='school_test_'+randomUUID().replaceAll('-','');
-const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(n=>readFileSync('infra/db/migrations/'+n,'utf8')).join('\n');
+const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(n=>readFileSync('apps/gateway/migrations/'+n,'utf8')).join('\n');
 const source=`
 import assert from 'node:assert/strict';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
@@ -120,6 +120,6 @@ try{
 }finally{await pool.query('DROP SCHEMA IF EXISTS ${schema} CASCADE');await pool.end();}
 `;
 try{
- const result=execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','n8n','node','--input-type=module'],{input:source,encoding:'utf8',stdio:['pipe','pipe','pipe']});
- const report=JSON.parse(result.trim());writeFileSync('docs/verification/school-database.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));
+ const result=execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','n8n','node','--input-type=module'],{input:source,encoding:'utf8',stdio:['pipe','pipe','pipe']});
+ const report=JSON.parse(result.trim());mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/school-database.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));
 }catch{throw new Error('School database verification failed; raw script and output withheld to protect credentials.');}

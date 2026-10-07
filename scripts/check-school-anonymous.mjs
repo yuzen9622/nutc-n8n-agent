@@ -1,4 +1,4 @@
-import {writeFileSync} from 'node:fs';
+import {writeFileSync,mkdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {SchoolClient} from '../dist/apps/school-adapter/src/modules/school/school.client.js';
 import {loginTokens,loginOutcome,schoolHtml,portalLoginPage} from '../dist/apps/school-adapter/src/modules/school/login.parse.js';
@@ -17,4 +17,4 @@ try{
  report.ocrCorrectness='not-submitted; format only';
  report.status=report.localOcrFiveCharacters?'pass':'ocr-format-rejected';
 }catch(error){report.status='failed';report.code=/^[A-Z_]+$/.test(error?.message??'')?error.message:'SMOKE_FAILED';process.exitCode=1;}
-finally{await client.jar.removeAllCookies();report.elapsedMs=Date.now()-started;writeFileSync('docs/verification/school-anonymous.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));}
+finally{await client.jar.removeAllCookies();report.elapsedMs=Date.now()-started;mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/school-anonymous.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));}

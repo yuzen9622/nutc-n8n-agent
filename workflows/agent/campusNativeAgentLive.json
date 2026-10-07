@@ -144,12 +144,12 @@
           "temperature": 0.2
         }
       },
-      "notes": "真實 Gemini 呼叫已通過原生節點驗證；使用共用持久預算 proxy，實際 key 只存在 .env。",
+      "notes": "真實 Gemini 呼叫已通過原生節點驗證；使用內部模型 proxy，實際 key 只存在 .env。",
       "notesInFlow": true,
       "credentials": {
         "googlePalmApi": {
           "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini budget proxy"
+          "name": "Campus Gemini proxy"
         }
       }
     },
@@ -223,7 +223,7 @@
         -340
       ],
       "parameters": {
-        "content": "## LINE 本人試用（即時搜尋停用）\nLINE Gateway 驗簽並持久接收 → worker 派送 → 原生 Agent → Gateway 驗證 → durable outbox 發送。\n使用獨立正式 credentials、具 generation 約束的 Memory 與 task/lease/capability。\nGemini／官方HTML與PDF向量語料／來源核對／費用限制已接線。單人受邀身分、新版 ePortal／AIS 真登入及三項真實學生工具已驗證；管理驗收真私人結果已由 LINE API 接受派送。測試總額已追加授權至 NT$300；原生模型選工具、記憶、真校務及混合管理驗收已通過獨立語意複核。依使用者要求優先上線已驗證核心功能，Google 搜尋保持停用；真人 LINE 與 LIFF UI 正在驗收，不以合成資料替代。",
+        "content": "## LINE 公開准入（即時搜尋停用）\nLINE Gateway 驗簽並持久接收 → worker 派送 → 原生 Agent → Gateway 驗證 → durable outbox 發送。\n不設受邀名單；使用者各自透過 LINE Login／LIFF 登入本人校務。本人校務結果可交由 Gemini 整理，保留 owner／generation／task／lease／capability 隔離、加密保存與撤銷。\n使用獨立正式 credentials、具 generation 約束的 Memory、官方 HTML／PDF 向量語料與來源核對。Worker 隨 gateway 啟動；Google 搜尋保持停用。",
         "width": 680,
         "height": 240
       }
@@ -287,11 +287,11 @@
       "parameters": {
         "modelName": "models/gemini-embedding-001"
       },
-      "notes": "固定 gemini-embedding-001／3072 維，匯入與查詢共用相同模型及費用上限。",
+      "notes": "固定 gemini-embedding-001／3072 維，匯入與查詢共用相同模型。",
       "credentials": {
         "googlePalmApi": {
           "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini budget proxy"
+          "name": "Campus Gemini proxy"
         }
       }
     },

@@ -1,4 +1,4 @@
-import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {requiredEnv} from './env.mjs';
@@ -6,7 +6,7 @@ const schema='knowledge_test_'+randomUUID().replaceAll('-',''),url=s=>'data:text
 const fault=url(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8'));
 const service=url(readFileSync('dist/apps/gateway/src/modules/knowledge/knowledge.service.js','utf8').replace("import { OfficialReader } from '../search/official-reader.js';",'class OfficialReader {}').replace("import { knowledgeCatalog } from './knowledge.catalog.js';",'const knowledgeCatalog=[];').replaceAll("'../../utils/fault.js'",JSON.stringify(fault)));
 const tasks=url(readFileSync('dist/apps/gateway/src/modules/tasks/task.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(fault)));
-const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','008-knowledge-corpus.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(n=>readFileSync('infra/db/migrations/'+n,'utf8')).join('\n');
+const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','008-knowledge-corpus.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql'].map(n=>readFileSync('apps/gateway/migrations/'+n,'utf8')).join('\n');
 const code=`
 import assert from 'node:assert/strict';import {randomUUID} from 'node:crypto';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
@@ -53,4 +53,4 @@ try{
  console.log(JSON.stringify({status:'pass',checks,synthetic:true,liveCorpusModified:false}));
 }finally{await pool.query('DROP SCHEMA IF EXISTS ${schema} CASCADE');await pool.end();}
 `;
-try{const output=execFileSync('docker',['exec','-i','-e','AGENT_DB_PASSWORD','campus-phase1-n8n-1','node','--input-type=module'],{input:code,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD')}});const report=JSON.parse(output.trim());writeFileSync('docs/verification/knowledge-database.json',JSON.stringify({checkedAt:new Date().toISOString(),...report},null,2)+'\n');console.log(JSON.stringify(report,null,2));}catch(error){console.error(String(error.stderr??'').slice(-1800));throw new Error('Knowledge SQL checks failed');}
+try{const output=execFileSync('docker',['exec','-i','-e','AGENT_DB_PASSWORD','campus-phase1-n8n-1','node','--input-type=module'],{input:code,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD')}});const report=JSON.parse(output.trim());mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/knowledge-database.json',JSON.stringify({checkedAt:new Date().toISOString(),...report},null,2)+'\n');console.log(JSON.stringify(report,null,2));}catch(error){console.error(String(error.stderr??'').slice(-1800));throw new Error('Knowledge SQL checks failed');}

@@ -127,7 +127,7 @@
       "credentials": {
         "googlePalmApi": {
           "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini budget proxy"
+          "name": "Campus Gemini proxy"
         }
       }
     },
@@ -279,7 +279,7 @@
         -240
       ],
       "parameters": {
-        "content": "## 官方語料匯入\n固定核定來源 → 逐段原生 Gemini Embeddings → PGVector 暫存 → 驗證全批 → 原子發布。\n不接受任意網址；不匯入學生私人資料。僅手動啟動，所有模型用量受共用預算限制。",
+        "content": "## 官方語料匯入\n固定核定來源 → 逐段原生 Gemini Embeddings → PGVector 暫存 → 驗證全批 → 原子發布。\n不接受任意網址；不匯入學生私人資料。僅由管理者手動啟動。",
         "width": 640,
         "height": 180
       }

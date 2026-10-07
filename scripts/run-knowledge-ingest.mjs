@@ -1,17 +1,21 @@
-import {readFileSync,writeFileSync,existsSync} from 'node:fs';
+import {readFileSync,writeFileSync,existsSync,mkdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {parse} from 'flatted';
 import {session,base} from './n8n-client.mjs';
 assert.equal(base,'http://localhost:15679');
-const reportPath='docs/verification/knowledge-ingest.json';
-if(existsSync(reportPath))throw Error('Ingestion record exists. Inspect its execution before starting another paid run.');
-const api=await session(),source=JSON.parse(readFileSync('workflows/agent/campusKnowledgeIngest.json','utf8'));
+const reportPath='.local/verification/knowledge-ingest.json';
+if(existsSync(reportPath))throw new Error('Ingestion record exists. Inspect its execution before starting another paid run.');
+const api=await session();
+let source;
+try{source=JSON.parse(readFileSync('workflows/agent/campusKnowledgeIngest.json','utf8'));}
+catch{throw new Error('Generated ingestion workflow is missing or invalid; refusing to run.');}
 const types=await api('/../types/nodes.json');
 for(const n of source.nodes)assert(types.some(t=>t.name===n.type&&[t.version].flat().includes(n.typeVersion)),`Unknown node ${n.type}`);
 const existing=await api('/workflows');assert(!existing.some(w=>w.name===source.name),'Inspect existing ingestion workflow before importing');
-const {id,active,...body}=source;
+const {id:_id,active:_active,...body}=source;
 const workflow=await api('/workflows','POST',body);
 const report={checkedAt:new Date().toISOString(),workflowId:workflow.id,status:'created',active:false,paid:true,privateDataSubmitted:false};
+mkdirSync('.local/verification',{recursive:true});
 writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');
 const started=await api(`/workflows/${workflow.id}/run`,'POST',{triggerToStartFrom:{name:'管理者手動匯入'}});
 report.executionId=started.executionId;report.status='running';writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n');

@@ -1,4 +1,4 @@
-import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
@@ -10,8 +10,8 @@ import {requiredEnv} from './env.mjs';
 if(!['http://localhost:15679','http://127.0.0.1:15679'].includes(base))throw new Error('LOCAL_N8N_REQUIRED');
 const unique=randomUUID().replaceAll('-',''),schema=`public_access_${unique}`,table=`public_memory_${unique}`;
 const workflows=[],executions=[],checks=[];
-const sql=input=>execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1','-tA'],{input,encoding:'utf8',stdio:['pipe','pipe','pipe']});
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'].map(n=>readFileSync(`infra/db/migrations/${n}`,'utf8')).join('\n');
+const sql=input=>execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1','-tA'],{input,encoding:'utf8',stdio:['pipe','pipe','pipe']});
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'].map(n=>readFileSync(`apps/gateway/migrations/${n}`,'utf8')).join('\n');
 const faultUrl='data:text/javascript;base64,'+Buffer.from(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8')).toString('base64');
 const repository=readFileSync('dist/apps/gateway/src/modules/line/line.repository.js','utf8').replace("'../../utils/fault.js'",JSON.stringify(faultUrl));
 let api;
@@ -23,7 +23,7 @@ try{
  const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:process.env.AGENT_DB_PASSWORD,options:'-c search_path=${schema}'});
  try{const repo=new LineRepository(pool,'synthetic-native-memory-secret-32-bytes');const keys=[];
  for(const user of ['U'+'a'.repeat(32),'U'+'b'.repeat(32)]){const {sessionKey}=await repo.identity(user);keys.push(sessionKey);await pool.query('INSERT INTO campus_conversations(session_key,user_id,generation) VALUES($1,$2,0)',[sessionKey,user]);}console.log(JSON.stringify(keys));}finally{await pool.end();}`;
- const keys=JSON.parse(execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','-e','AGENT_DB_PASSWORD','n8n','node','--input-type=module'],{input:setup,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD')}}).trim());
+ const keys=JSON.parse(execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','-e','AGENT_DB_PASSWORD','n8n','node','--input-type=module'],{input:setup,encoding:'utf8',stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD')}}).trim());
  assert.notEqual(keys[0],keys[1]);
  sql(`SET ROLE campus_agent; CREATE TABLE public.${table} (LIKE ${schema}.live_agent_chat_histories INCLUDING ALL); ALTER FUNCTION ${schema}.campus_guard_memory_insert() SET search_path TO ${schema}; CREATE TRIGGER campus_memory_identity BEFORE INSERT OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION ${schema}.campus_guard_memory_insert();`);
  const main=JSON.parse(readFileSync('workflows/agent/campusNativeAgentLive.json','utf8'));
@@ -61,5 +61,5 @@ try{
  }
  sql(`SET ROLE campus_agent; DROP TABLE IF EXISTS public.${table}; DROP SCHEMA IF EXISTS ${schema} CASCADE;`);
 }
-writeFileSync('docs/verification/public-line-memory-runtime.json',JSON.stringify({checkedAt:new Date().toISOString(),status:'pass',n8n:'2.41.7',syntheticTestInputs:true,externalProviderCalls:false,temporaryResourcesRemoved:true,checks},null,2)+'\n');
+mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/public-line-memory-runtime.json',JSON.stringify({checkedAt:new Date().toISOString(),status:'pass',n8n:'2.41.7',syntheticTestInputs:true,externalProviderCalls:false,temporaryResourcesRemoved:true,checks},null,2)+'\n');
 console.log('PASS: two-owner native Memory isolation, revocation and temporary-resource cleanup; no model, LINE or school calls.');

@@ -16,7 +16,7 @@ mkdirSync(`${directory}/node_modules`,{recursive:true});
 writeFileSync(`${directory}/package.json`,'{"type":"module"}');
 cpSync('dist/apps/gateway/src',`${directory}/gateway`,{recursive:true});
 cpSync(realpathSync('node_modules/zod'),`${directory}/node_modules/zod`,{recursive:true});
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'].map(name=>readFileSync(`infra/db/migrations/${name}`,'utf8')).join('\n');
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','014-extended-private-operations.sql','015-public-line-access.sql'].map(name=>readFileSync(`apps/gateway/migrations/${name}`,'utf8')).join('\n');
 const serviceScript=`
 import {createServer} from 'node:http';
 import {readFileSync,writeFileSync} from 'node:fs';
@@ -29,7 +29,6 @@ import {lineRouter} from './gateway/modules/line/line.router.js';
 import {TaskRepository} from './gateway/modules/tasks/task.repository.js';
 import {TaskService} from './gateway/modules/tasks/task.service.js';
 import {TaskController} from './gateway/modules/tasks/task.controller.js';
-import {BudgetRepository} from './gateway/modules/budget/budget.repository.js';
 const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:process.env.AGENT_DB_PASSWORD,options:'-c search_path=${schema}',max:5});
 await pool.query('CREATE SCHEMA ${schema}');
 await pool.query(${JSON.stringify(migration)});
@@ -44,7 +43,7 @@ const schoolFixture={query:async()=>({sessionId:schoolId,result:{kind:'schedule'
 const service=new LineService(identities,new LineProvider('123','unused',async()=>{throw Error('External calls prohibited in this test');}));
 const searchFixture={search:async()=>[{sourceId:'web:runtime-fixture',url:'https://school.example.edu.tw/rules',title:'Runtime fixture',text:'This is explicitly synthetic provider text used only to verify the source ledger.',version:'runtime-v1',fetchedAt:new Date().toISOString(),validUntil:new Date(Date.now()+60000).toISOString(),publishedAt:null}]};
 const groundingFixture=${googleMode?"{searchHtml:async()=>'<article>GROUNDING_RUNTIME_SENTINEL</article>'}":'undefined'};
-const server=createServer(lineRouter(new LineController(service,'unused',user),new TaskController(new TaskService(tasks,identities,searchFixture,new BudgetRepository(pool,100),10,schoolFixture,groundingFixture),process.env.RUNTIME_SERVICE_TOKEN)));
+const server=createServer(lineRouter(new LineController(service,'unused',user),new TaskController(new TaskService(tasks,identities,searchFixture,schoolFixture,groundingFixture),process.env.RUNTIME_SERVICE_TOKEN)));
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 writeFileSync('${remote}/port',String(server.address().port));
 console.log('READY:'+JSON.stringify({taskId:task.id,lease:task.lease,capability:task.capability}));
@@ -62,7 +61,7 @@ process.stdin.once('data',async()=>{
 writeFileSync(`${directory}/server.mjs`,serviceScript,{mode:0o600});
 // Test credentials stay in memory and encrypted n8n storage, never an import file.
 try {importCredentials([{id:credentialId,name:credentialId,type:'httpHeaderAuth',data:{name:'X-Campus-Service',value:token}}]);} catch {rmSync(directory,{recursive:true,force:true});throw new Error('Isolated test credential import failed; raw output withheld.');}
-const child=spawn('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','-e','AGENT_DB_PASSWORD','-e','RUNTIME_SERVICE_TOKEN','n8n','node',`${remote}/server.mjs`],{stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD'),RUNTIME_SERVICE_TOKEN:token}});
+const child=spawn('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','-e','AGENT_DB_PASSWORD','-e','RUNTIME_SERVICE_TOKEN','n8n','node',`${remote}/server.mjs`],{stdio:['pipe','pipe','pipe'],env:{...process.env,AGENT_DB_PASSWORD:requiredEnv('AGENT_DB_PASSWORD'),RUNTIME_SERVICE_TOKEN:token}});
 let taskAuth;
 let workflow;
 let executionId;
@@ -93,7 +92,7 @@ try {
  // in public with the same trigger policy and a temporary scoped mapping in the test schema.
  const table=`probe_memory_${unique}`;
  const sql=`SET ROLE campus_agent; CREATE TABLE public.${table} (LIKE ${schema}.live_agent_chat_histories INCLUDING ALL); CREATE TRIGGER campus_memory_identity BEFORE INSERT OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION ${schema}.campus_guard_memory_insert(); ALTER FUNCTION ${schema}.campus_guard_memory_insert() SET search_path TO ${schema};`;
- execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1'],{input:sql,stdio:['pipe','pipe','pipe']});
+ execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1'],{input:sql,stdio:['pipe','pipe','pipe']});
  memory.parameters.tableName=table;
  memory.credentials={postgres:{id:'campus-agent-postgres',name:'Campus Agent Postgres'}};
  const manager={id:'memory-probe',name:'原生記憶寫入',type:'@n8n/n8n-nodes-langchain.memoryManager',typeVersion:1.1,position:[960,0],parameters:{mode:'insert',insertMode:'insert',messages:{messageValues:[{type:'user',message:'runtime-only memory probe',hideFromUI:false}]}}};
@@ -114,19 +113,19 @@ try {
  assert(privateTool.data.includes('PRIVATE_RUNTIME_SENTINEL'));assert.equal(privateTool.message,privateTool.data);
  if(googleMode){assert(!JSON.stringify(data).includes('GROUNDING_RUNTIME_SENTINEL'));assert.equal(data.resultData.runData[search.name].at(-1).data.main[0][0].json.data.status,'grounded_answer_ready');}
  assert.equal(data.resultData.runData[personal.name].at(-1).data.main[0][0].json.data.status,'ready');
- const nativeCount=execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-tAc',`SELECT count(*) FROM public.${table}`],{encoding:'utf8'}).trim();
+ const nativeCount=execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-tAc',`SELECT count(*) FROM public.${table}`],{encoding:'utf8'}).trim();
  assert.equal(nativeCount,'1');
  const exit=new Promise(resolve=>child.once('exit',resolve));child.stdin.write('stop\n');await exit;
  const state=JSON.parse(readFileSync(`${directory}/result.json`,'utf8'));assert.equal(state.outbox.length,1);
  assert(state.outbox[0].encrypted);assert(!state.outbox[0].reply.includes('PRIVATE_RUNTIME_SENTINEL'));assert(state.privateDelivered);assert(state.citationDelivered);
  if(googleMode)assert.equal(state.groundedOwnerReadable,true);
- writeFileSync(googleMode?'docs/verification/google-search-runtime.json':'docs/verification/live-dispatch-runtime.json',JSON.stringify({recordedAt:new Date().toISOString(),executionId:started.executionId,status:'pass',n8n:'2.41.7',syntheticTestInputs:true,gateway:'actual prepare, direct search configuration and completion HTTP endpoints',memory:'native Postgres Memory insert with generation trigger',outbox:'single encrypted mixed answer; local delivery validates private template and citation; no LINE network call',gemini:'not-run',school:'synthetic school provider; actual owner-authorized HTTP tool exposes rendered owner-only data and lease-bound ref for Gemini, per explicit user approval; no live school or Gemini call',sourceLedger:googleMode?'Google grounded answer synthetic fixture; encrypted owner result and LINE link verified; no live Google call':'runtime fixture recorded and checked; Brave network mocked; no school corpus'},null,2)+'\n');
+ mkdirSync('.local/verification',{recursive:true});writeFileSync(googleMode?'.local/verification/google-search-runtime.json':'.local/verification/live-dispatch-runtime.json',JSON.stringify({recordedAt:new Date().toISOString(),executionId:started.executionId,status:'pass',n8n:'2.41.7',syntheticTestInputs:true,gateway:'actual prepare, direct search configuration and completion HTTP endpoints',memory:'native Postgres Memory insert with generation trigger',outbox:'single encrypted mixed answer; local delivery validates private template and citation; no LINE network call',gemini:'not-run',school:'synthetic school provider; actual owner-authorized HTTP tool exposes rendered owner-only data and lease-bound ref for Gemini, per explicit user approval; no live school or Gemini call',sourceLedger:googleMode?'Google grounded answer synthetic fixture; encrypted owner result and LINE link verified; no live Google call':'runtime fixture recorded and checked; Brave network mocked; no school corpus'},null,2)+'\n');
  console.log('Live gateway HTTP, guarded native Memory and durable outbox passed in n8n. No external provider calls.');
 } finally {
  if(child.exitCode===null) {const exit=new Promise(resolve=>child.once('exit',resolve));child.stdin.write('stop\n');await Promise.race([exit,new Promise(resolve=>setTimeout(resolve,5000))]);}
  if(executionId)await api('/executions/delete','POST',{ids:[executionId]});
  if(workflow) {await api(`/workflows/${workflow.id}/archive`,'POST');await api(`/workflows/${workflow.id}`,'DELETE');}
  await api(`/credentials/${credentialId}`,'DELETE');
- execFileSync('docker',['compose','--env-file','.env','-f','infra/compose.yaml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1'],{input:`SET ROLE campus_agent; DROP TABLE IF EXISTS public.probe_memory_${unique}; DROP SCHEMA IF EXISTS ${schema} CASCADE;`,stdio:['pipe','pipe','pipe']});
+ execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','postgres','psql','-U','bootstrap','-d','campus_agent','-v','ON_ERROR_STOP=1'],{input:`SET ROLE campus_agent; DROP TABLE IF EXISTS public.probe_memory_${unique}; DROP SCHEMA IF EXISTS ${schema} CASCADE;`,stdio:['pipe','pipe','pipe']});
  rmSync(directory,{recursive:true,force:true});
 }

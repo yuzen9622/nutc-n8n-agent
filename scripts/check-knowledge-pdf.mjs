@@ -1,16 +1,22 @@
 import {session,base} from './n8n-client.mjs';
-import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {parse} from 'flatted';
 import assert from 'node:assert/strict';
 assert.equal(base,'http://localhost:15679');
-const path='docs/verification/knowledge-pdf.json',report=JSON.parse(readFileSync(path,'utf8'));
+const path='.local/verification/knowledge-pdf.json';
+let report;
+try{report=JSON.parse(readFileSync(path,'utf8'));}
+catch{throw new Error('PDF ingestion report is missing or invalid; refusing to test.');}
 assert.equal(report.status,'success','Publish PDF corpus before retrieval');
 assert(!report.retrieval,'Inspect recorded retrieval before another paid attempt');
-const save=()=>writeFileSync(path,JSON.stringify(report,null,2)+'\n');
-const api=await session(),template=JSON.parse(readFileSync('workflows/agent/campusNativeAgentLive.json','utf8'));
+const save=()=>{mkdirSync('.local/verification',{recursive:true});writeFileSync(path,JSON.stringify(report,null,2)+'\n');};
+const api=await session();
+let template;
+try{template=JSON.parse(readFileSync('workflows/agent/campusNativeAgentLive.json','utf8'));}
+catch{throw new Error('Generated live workflow is missing or invalid; refusing to test.');}
 const vector=structuredClone(template.nodes.find(n=>n.id==='vector')),embedding=structuredClone(template.nodes.find(n=>n.id==='embedding'));
 vector.parameters={...vector.parameters,mode:'load',tableName:'campus_knowledge_current',prompt:'五專前三年請假，是否要列印紙本、貼郵票並經導師簽名？',topK:3};
-embedding.credentials={googlePalmApi:{id:'campus-live-gemini-proxy',name:'Campus Gemini budget proxy'}};
+embedding.credentials={googlePalmApi:{id:'campus-live-gemini-proxy',name:'Campus Gemini proxy'}};
 const start={id:'manual',name:'PDF真實檢索驗證',type:'n8n-nodes-base.manualTrigger',typeVersion:1,position:[0,0],parameters:{}};
 const workflow=await api('/workflows','POST',{name:'TEMP official PDF native retrieval verification',nodes:[start,vector,embedding],connections:{[start.name]:{main:[[{node:vector.name,type:'main',index:0}]]},[embedding.name]:{ai_embedding:[[{node:vector.name,type:'ai_embedding',index:0}]]}},settings:{executionOrder:'v1',saveManualExecutions:true,saveDataSuccessExecution:'all',saveDataErrorExecution:'all'},pinData:{}});
 report.retrieval={workflowId:workflow.id,status:'created',query:vector.parameters.prompt};save();
@@ -23,7 +29,7 @@ for(let i=0;i<50;i++){
   await new Promise(resolve=>setTimeout(resolve,1000));
 }
 report.retrieval.status=execution.status;save();
-if(!['success','error','crashed','canceled'].includes(execution.status))throw Error('Execution still live; inspect the recorded handle, do not restart');
+if(!['success','error','crashed','canceled'].includes(execution.status))throw new Error('Execution still live; inspect the recorded handle, do not restart');
 try{
   const data=typeof execution.data==='string'?parse(execution.data):execution.data;
   assert.equal(execution.status,'success','PDF retrieval failed; inspect execution');

@@ -9,7 +9,7 @@ test('personal tools persist login guidance only after verified school session f
  const repository={authorizeTool:async()=>({userId:'trusted-owner'}),recordLoginRequired:async(value:unknown)=>{assert.deepEqual(value,auth);notices++;return {status:'login_required'};}};
  let failure=new Fault(401,'SCHOOL_LOGIN_REQUIRED');
  const school={query:async(user:string)=>{assert.equal(user,'trusted-owner');throw failure;}};
- const service=new TaskService(repository as never,{} as never,undefined,undefined,0,school as never);
+ const service=new TaskService(repository as never,{} as never,undefined,school as never);
  assert.deepEqual(await service.tool(auth,'personal','schedule'),{status:'login_required'});assert.equal(notices,1);
  failure=new Fault(503,'SCHOOL_UNAVAILABLE');await assert.rejects(service.tool(auth,'personal','schedule'),/SCHOOL_UNAVAILABLE/);assert.equal(notices,1);
 });
@@ -104,7 +104,7 @@ test('TaskService routes grades, leave and send_mail actions with query or param
   }
  };
 
- const service=new TaskService(repository as never,{} as never,undefined,undefined,0,school as never);
+ const service=new TaskService(repository as never,{} as never,undefined,school as never);
 
  // 1. grades query
  await service.tool(auth,'personal','grades:1121');
