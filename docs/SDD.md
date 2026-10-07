@@ -1,118 +1,99 @@
 # 校園 n8n AI Agent 系統設計
 
-版本：0.5；2026-10-06。依使用者的「My workflow」原生節點架構修訂，區分正式實作與歷史合成流程；實作與驗收狀態依 [Roadmap](ROADMAP.md)。
+更新：2026-10-07。實作進度與未完成驗收見 [Roadmap](ROADMAP.md)，部署見 [README](../README.md)。文件僅保留設計與路線圖，歷史 mock 與 Phase 1 驗證資產不再交付。
 
 ## 1. 目的與範圍
 
-以 LINE 提供校園公開問答、本人課表、缺曠及學生公告。AI Agent 建立在 n8n，使用 Google Gemini、Postgres Chat Memory、PGVector 與直接連接的 HTTP Request／Search Tools。先在本機 Docker 驗證，穩定後才部署 Linux 遠端。
+透過 LINE 提供國立臺中科技大學公開資訊問答及本人校務功能。核心為 n8n 原生 AI Agent、Google Gemini、Postgres Chat Memory、PGVector、Embeddings 與直接 HTTP Request Tools，不以 Call n8n Workflow Tool 統一包裝功能。
 
-不保存學校密碼；不提供校務寫入、訂閱計費或年齡聲明流程。LINE、LIFF、校方登入、OCR、Brave、真實 Gemini 與知識庫語料仍分階段接通，不能把合成資料測試當作正式服務。
+學校登入入口為 `https://sso.nutc.edu.tw/eportal/default.aspx`。既有校務程式參考 `nutc_student_system` 的 auth、schedule、absence、announcement service／parse，不沿用其密碼保存、自動重新登入或背景 warmup。校务 adapter 以本人 session 呼叫校方，不將既有程式 API 當作已部署的校方 API。
 
-### 學校與既有程式基線
+LINE Messaging Channel 為 `2011885580`，Login Channel 為 `2011885607`，LIFF 為 `2011885607-MccunYXG`；目前公開入口為 `https://nutc-agent.yuzen.dev/liff/`。後端驗證 LINE ID token 後建立本人 web session，不實作獨立 LINE Login callback。Login Channel 的 Published 狀態由使用者確認，不宣稱 Console 獨立驗證。
 
-目標學校為 **國立臺中科技大學**；校務登入入口為 `https://sso.nutc.edu.tw/eportal/default.aspx`。
-既有程式位於 `/Volumes/KINGSTON/yuzen/code/nutc_student_system`，原 SDD 檢視基線為 `b2e4d4fd033e284334d8ea055f9a6fe31dcfb8cc`。本節補回精簡 v0.4 時遺漏的學校資訊，依本專案 `4c5e10e:docs/SDD.md`，實際移植仍重新檢查現行原始碼。
-
-- 登入協定：`backend/src/modules/auth/auth.service.ts`、`backend/src/utils/nutc-session.ts`、`backend/src/utils/ocr.ts`。ASP.NET ViewState／captcha／CookieJar；本地 `ddddocr-node`，驗證碼五字元，最多三輪且總計 30 秒。只有明確驗證碼錯誤可重試；密碼錯誤、鎖定或結果不明即停止。
-- 課表、缺曠、公告：`backend/src/modules/school/{schedule,absence,announcement}/` 的 service／parse。既有 `/api/v1/auth/login`、`/school/schedule`、`/school/absence?semester=1131`、`/school/announcement` 是程式介面參考，不代表已部署可呼叫的校方 API。
-- 不沿用既有 Redis 密碼保存、自動重新登入、背景 warmup 或他人 session。新 adapter 使用獨立隨機 session，密碼僅用於當次登入且不 trim。session 最長八小時、閒置三十分鐘；同使用者／帳號禁止並行登入；只有校方明確拒絕帳密才計入十五分鐘兩次保護，OCR／連線／解析失敗不計入。
-- 一個學號只綁一個 LINE 身分；解除綁定撤銷 session 與尚未交付的私人結果。LIFF ID token 由後端驗證，再簽發 Secure／HttpOnly／SameSite=Lax session；敏感操作檢查 Origin 及 CSRF。
-- 初始公開來源網域：`www.nutc.edu.tw`、`aca.nutc.edu.tw`、`student.nutc.edu.tw`、`elib.nutc.edu.tw`。PGVector／官方 reader 路徑只有核定、取得原文並登錄的來源可作答案證據；Google Search Grounding 使用獨立的本人結果頁，不能冒充已核定的 RAG 原文證據。
-
-2026-10-06 使用者提供 Messaging Channel `2011885580`、Login Channel `2011885607`、LIFF `2011885607-MccunYXG`；公開 HTTPS 為 `https://nutc-agent.yuzen.dev`，透過 Cloudflare Tunnel 接本機受限 ingress。LINE／Gemini 秘密已存根目錄 `.env`，不存 `.local`。LIFF endpoint 為 `/liff/`；採 LIFF SDK 登入，未實作獨立 LINE Login callback 路由。使用者指定先限本人試用，尚待其 LINE User ID 與自行完成校務登入。付費測試授權為 **新臺幣 100 元總額內**，不是每日或每個供應商各 100 元。正式接通進度以 [Phase 2–5 追蹤](PHASE-2-5-IMPLEMENTATION.md) 為準。
-
-## 2. 系統責任
+## 2. 系統責任與工作流
 
 | 元件 | 責任 |
 |---|---|
-| n8n Webhook 與前置節點 | 接收內部事件、呼叫驗證／去重、整理模型輸入與 session key |
-| n8n AI Agent | 理解問題、利用對話上下文、選擇工具、依公開證據產生答案 |
-| Google Gemini Chat Model | AI Agent 的生成與工具選擇模型，直接連接 ai_languageModel |
-| Postgres Chat Memory | 以 session key 保存對話，直接連接 ai_memory |
-| Postgres PGVector Store | 以 retrieve-as-tool 模式直接連接 ai_tool，檢索公開知識 |
-| Google Gemini Embeddings | 連接 PGVector 的 ai_embedding；文件與查詢用相同模型及維度 |
-| 學生 HTTP Request Tools | 固定端點與操作，呼叫本人課表／缺曠／公告 API |
-| Search Tool | HTTP Request Tool 呼叫受控搜尋介面；已實作 Brave／官方 reader，但未接真實搜尋。Google Search 替代方向待定，其 grounding 不能直接當網址爬取服務 |
-| Gateway／school-adapter | LINE 驗簽、身分與工具權限、登入／OCR／Cookie、個人資料處理及回覆發送 |
-| 結果處理 | 驗證模型輸出、核對來源、本地組裝私人結果，再回覆 |
-
-正常工具不包成 Call n8n Workflow Tool。子流程僅在未來確有可重用的多步驟流程時另行引入。舊 WF-01～07 與三個包裝工具是歷史測試資產，不是本版主流程。
-
-## 3. 主流程與連線
+| gateway | LINE raw-body 驗簽、身分、LIFF session／CSRF、持久任務、工具權限、模型代理、outbox 派送 |
+| school-adapter | 校務登入、本地 OCR、Cookie 與本人校務查詢；內部 API 不對外公開 |
+| n8n | 原生 Agent、工具選擇、對話記憶、公開語料匯入及檢索 |
+| PostgreSQL／pgvector | 獨立 n8n metadata DB 與 Agent DB；身分、任務、session、Memory、語料 |
+| 受限公開 ingress | 僅 LINE／LIFF 所需路徑；不轉送 internal、provider 或 n8n 管理路徑 |
 
 ```mermaid
 flowchart LR
-  W[Webhook] --> V[驗證與去重] --> I[整理訊息] --> A[AI Agent] --> C[驗證與本地組裝] --> R[回覆]
-  G[Google Gemini Chat Model] -. ai_languageModel .-> A
+  L[LINE] --> GW[Gateway 驗簽及持久 ACK]
+  GW --> W[Worker / task lease]
+  W --> N[n8n Webhook]
+  N --> V[驗證及整理可信上下文]
+  V --> A[AI Agent]
+  G[Gemini Chat Model] -. ai_languageModel .-> A
   M[Postgres Chat Memory] -. ai_memory .-> A
-  P[Postgres PGVector Store] -. ai_tool .-> A
-  E[Google Gemini Embeddings] -. ai_embedding .-> P
-  H[學生 HTTP Request Tools] -. ai_tool .-> A
-  S[Search Tool] -. ai_tool .-> A
+  P[PGVector] -. ai_tool .-> A
+  E[Gemini Embeddings] -. ai_embedding .-> P
+  H[學生 HTTP Tools] -. ai_tool .-> A
+  S[官方 Search Tool] -. ai_tool .-> A
+  A --> C[驗證結果及來源]
+  C --> O[加密 outbox]
+  O --> L
+  H --> GW
+  GW --> SA[School adapter]
 ```
 
-重複事件直接回 duplicate，不再次呼叫 Agent。技術失敗與輸出不合法走固定錯誤回覆，不把 stack、token 或原始私人資料回傳。
+正式主流程 `campusNativeAgentLive` 由 `scripts/generate-live-agent-workflow.mjs` 產生；官方語料流程 `campusKnowledgeIngest` 由 `scripts/generate-knowledge-workflow.mjs` 產生。JSON 不含秘密，僅保存 credential 參照。生成不等於匯入、發布或驗收；新空環境的匯入與發布由 Docker 一次性初始化負責，不覆寫未知 instance／使用者畫布。
 
-本機內部 Webhook 等待結果後回 JSON；正式 LINE 必須先驗簽、持久接收並快速 ACK，再派送 n8n 任務，不能讓 LINE 等待整段模型運算。
+主流程採 Webhook → prepare／整理訊息 → Agent → completion → 回覆。原生節點包含 Gemini Chat Model、Postgres Chat Memory、PGVector Store、Gemini Embeddings，以及 student_schedule、student_absence、student_announcements、student_grades、student_leave、student_send_mail 與 official_search。各工具固定端點及操作；模型只填允許的業務參數，不得提供使用者識別、任意 URL 或 capability。
 
-## 4. 模型與記憶
+正式流程不保存 n8n execution 原文。Agent maxIterations=5、timeout=90 秒，HTTP 工具每任務最多四次；此上限用於執行資源控制，不涵蓋所有原生工具。
 
-生成模型為 `models/gemini-3.8-flash`，embedding 為 `models/gemini-embedding-001`／3072維；真實API及原生節點已完成smoke與部分公開QA。原始key只由Gateway讀取 `.env`；n8n credential持有內部proxy token及host，工作流JSON只保存credential參照。原生node經Gateway費用proxy轉送供應商契約，不採用舊設計的Interactions API adapter。可用性測試不代表所有問答與真人LINE整合已通過。
+## 3. 身分、任務與記憶
 
-Postgres Chat Memory 的 contextWindowLength=5。它限制提供給模型的上下文，不代表資料庫只保留五筆，也不自動刪除歷史。本機合成 session 為 `synthetic:demo-a`／`synthetic:demo-b`；正式 session key 必須由已驗證的使用者與會話推導，不能採用匿名請求任意指定的他人識別值。
+所有人可加入 LINE Bot；已驗簽的一對一事件或已驗證 LINE ID token 自動註冊本人身分，不需要受邀名單。群組不執行私人校務功能。首次並行請求由唯一鍵與身分 row lock 保護。
 
-正式實作以已驗證LINE身分與generation推導session key，支援清除對話、解除綁定與七天清理。資料庫trigger限制原生Memory只能寫入仍有效的身分generation；清除／撤銷與派送共同鎖定身分。對話內容可能送Gemini作上下文，LIFF頁提供資料處理告知。關閉n8n execution原文保存不等於Chat Memory不保存；真人多輪驗收仍待完成。
+LINE 入口以 transaction 寫入 inbox／task 後快速 ACK，worker 隨 gateway 啟動並派送 n8n，不設額外啟用旗標；LINE ACK 不等待模型運算。prepare／tool／complete 綁定身分 generation、task、lease、capability 及一次 prepare 檢查點；capability 只存 hash。租約 90 秒、任務最長五分鐘，每人同時只處理一個任務。重複事件不再次呼叫 Agent。
 
-## 5. 工具、資料與授權
+session key 由後端驗證的身分與 generation 推導，不能由匿名輸入指定。Postgres Chat Memory contextWindowLength=5 只限制模型上下文，不自動限制資料庫筆數。正式記憶最多七天，支援清除對話與撤銷；資料庫 trigger 限制原生 Memory 只能寫有效 generation。
 
-### 公開資料
+解除綁定或 unfollow 輪替 generation、刪除本人校務 session、私人暫存與記憶、取消未交付工作。follow 不能解除既有 revoked；本人精確傳送「重新啟用」只恢復助理，不恢復舊校務 Cookie。撤銷與派送共用身分鎖。migration 015 保留舊 `invited` 欄位，但不再以它控制准入。
 
-PGVector 儲存核定公開文件與來源 metadata。Search Tool 已接 Gemini 官方 Google Search，由 Gemini 搜尋並統整；完整答案、來源及 Search Suggestions 在受驗證的本人 LIFF 結果頁呈現。主 Agent 只收到完成狀態，grounding 內容不送入 crawler、共享 RAG 或主 Agent Memory。Google 分支與官方 reader 證據路徑不同，付費實測尚待完成；詳見 [Google Search](GOOGLE-SEARCH.md)。工具取得的文字一律視為資料，不能改寫系統指令或擴大權限。具體匯入與檢索見 [RAG](RAG.md)。
+## 4. 校務與個人資料
 
-### 個人資料
+LIFF 登入由後端驗證 ID token，簽發 Secure／HttpOnly／SameSite=Lax session；敏感操作檢查 Origin 與 CSRF。一個學號只能綁一個 LINE 身分，同使用者／帳號禁止並行登入。
 
-每項學生功能有獨立 HTTP Request Tool：student_schedule、student_absence、student_announcements。工具端點和 action 固定；taskId／capability／使用者身分從可信前置資料映射，不由模型填寫。學校帳密僅在 LIFF 登入請求交給 school-adapter，登入 Cookie 留在後端；本地 OCR 最多三輪／30秒，密碼錯誤立即停止，結果不明不盲目重送。
+ASP.NET ViewState／captcha／CookieJar 協定由獨立 adapter 處理，本地 `ddddocr-node` 處理五字元驗證碼，最多三輪且總計 30 秒。只有明確 captcha 錯誤可重試；密碼錯誤、鎖定或結果不明立即停止。只有校方明確拒絕帳密才計入十五分鐘兩次保護；OCR、連線或解析失敗不計入。
 
-2026-10-07 使用者明確核准本人校務查詢結果提供給 Google Gemini 整理。學生工具回傳經本人 session／task／lease／capability 驗證的結果與 ref，供模型組織回答；回答可能進入本人隔離的 Chat Memory（最多七天），不進共享 RAG。登入密碼與 Cookie 不提供給模型，密碼不保存。私人 ref 和待發回覆仍加密，完成／派送再次驗證本人 session 與撤銷；不能查取別人的資料。LIFF 頁面明示上述資料處理方式。未登入指引及獨立 Grounding 結果由後端固定產生，不被模型任意替換。
+密碼僅用於當次登入，不 trim、不保存。Cookie 留在後端加密保存；session 最長八小時、閒置三十分鐘。學校登入帳密不進模型。
 
-### 歷史本機合成契約
+2026-10-07 使用者明確核准本人校務結果提供 Google Gemini 整理。工具回傳經本人 session／task／lease／capability 驗證的結果及 ref；回答可保存於本人隔離 Memory，最多七天，不進共享 RAG。私人 ref 與待發 outbox 加密，completion 與派送再次核對本人 session 及撤銷狀態；LIFF 頁明示資料處理方式。未登入指引及獨立 Grounding 結果由後端固定產生，不被模型替換。
 
-`POST /internal/v1/agent/prepare`：嚴格接受 eventId、scenario（knowledge/web/personal/mixed）及 session（demo-a/demo-b），產生固定測試 prompt、taskId、capability、sessionKey。拒絕額外欄位，不接收真實學生文字。
+## 5. 公開語料與搜尋
 
-`POST /internal/v1/agent/tool`：接受 taskId、capability、kind、query。直接 HTTP 工具使用固定 personal 或 web；personal query 僅允許三個既定 action。回傳合成資料或處理狀態。knowledge 舊分支只供舊回歸測試，新主流程直接查 PGVector。
+原生生成模型為 `models/gemini-3.8-flash`，embedding 為 `models/gemini-embedding-001`／3072 維。n8n credential 持有內部 proxy token 與 host，供應商原始 key 僅由 gateway 從根 `.env` 讀取。
 
-`POST /internal/v1/agent/complete`：合成gateway接受模型JSON字串 `{answer, sourceIds}`，拒絕非法形狀、未知引用與無依據回答，本地合併合成私人模板。以上僅適用 `apps/mock-gateway` 和歷史工作流，不得用它們宣稱正式資料驗收通過。
+官方語料初始網域為 `www.nutc.edu.tw`、`aca.nutc.edu.tw`、`student.nutc.edu.tw`、`elib.nutc.edu.tw`。管理者手動啟動匯入：固定官方 reader → hash 去重 → 原生 Gemini Embeddings → PGVector staging → 整批驗證／原子發布。只接受核定並取得原文的來源。
 
-上述合成端點使用service credential及記憶體任務；正式 `apps/gateway` 為獨立實作，不把外部連線加進mock gateway。
+completion 核對本次 native observation 的來源版本、chunkId 與全文，绑定本次任務；完成及派送再次檢查來源有效性。記憶中的 sourceId 或僅存在的來源 ID 不能證明本次回答有依據。來源不足時拒答或追問。
 
-### 正式持久契約
+Google 官方 Search Grounding 使用獨立的本人 LIFF 結果頁，呈現答案、來源及 Search Suggestions；主 Agent 只收到完成狀態。Grounding 不送 crawler、共享 RAG 或主 Agent Memory，不能冒充核定 RAG 原文。搜尋預設保持停用，使用獨立的 Google Search 開關，啟用前需完成供應商與搜尋結果驗收。舊 Brave adapter 不作目前搜尋部署預設。
 
-LINE入口驗簽後以transaction寫入inbox／task並ACK，worker再派送具taskId／lease／capability的內部Webhook。prepare／tool／complete綁定身分generation、任務租約與一次prepare檢查點。capability只存hash；租約90秒、任務最長5分鐘；每位使用者同時只處理一個任務。
+所有工具文字均視為資料，不能擴大權限或改寫系統指令。官方 reader 與校方 client 檢查固定 host、DNS 及 redirect；Docker 可連外並不等於供應商域名 allowlist。
 
-正式PGVector已有3份核定HTML／PDF、6段真實向量。completion由固定工作流轉交native observation，後端核對來源版本、chunkId及全文，綁定本次任務證據；完成與outbox派送時再次核對來源有效性。私人ref與outbox內容加密，派送前再檢查學校session。記憶中的sourceId不能冒充本次證據。
+## 6. 錯誤及訊息體驗
 
-不使用受邀名單或人工批准。使用者加入 LINE Bot，經已驗簽的一對一事件或後端驗證的 LINE ID token 自動建立自己的身分；LIFF 各自登入本人校務帳號。首次並行請求以唯一鍵及身分 row lock 安全註冊。私人資料、對話記憶、task／lease／capability 仍以本人與 generation 隔離；同學號不能同時綁定兩個 LINE 身分。
+依使用者要求，應用程式不再實作費用預留、用量結算、每日／累計費用上限或任務 worker 啟用開關。模型、embedding 與搜尋費用由供應商計收；保留 token／body／response 大小、timeout、工具次數及任務期限限制。Google Search 獨立開關不變，模型不擅自更換。
 
-解除綁定或 unfollow 仍輪替 generation、刪除本人登入狀態、清除私人暫存／記憶並取消未交付工作；一般訊息或重新開 LIFF 不會復活已撤銷帳號。follow 只註冊新的／未撤銷身分，不能解除既有撤銷，避免延遲重送推翻較新的 unfollow。已撤銷者須本人精確傳送「重新啟用」，僅恢復助理使用，不恢復舊校務 Cookie。migration 015 保留 `invited` 舊欄位以相容既有 schema，但它不再控制准入、派送、Memory 或清理。公開 HTTP 輸入與身分／Origin／CSRF 契約不變；移除的是邀請限制，不是身分驗證。
+技術錯誤、非法輸出或來源不符使用固定安全回覆，不曝露 stack、token、Cookie 或他人資料。worker 領取任務後 best-effort 呼叫 LINE loading API（60 秒、1.5 秒 request timeout），失敗不阻擋 Agent；動畫只支援正在查看一對一聊天室的手機，HTTP 202 不代表實際可見。
 
-## 6. 預算與錯誤
-
-Agent maxIterations=5；Gateway的HTTP工具每任務最多4次；主流程timeout=90秒。PGVector查詢直接使用資料庫，模型及embedding HTTP經費用proxy；四次HTTP工具限制不涵蓋全部原生工具，也不能把maxIterations當成費用硬上限。
-
-Gemini、embedding及現有Brave adapter共用持久預算預留；每個供應商HTTP嘗試（含SDK重試）均先通過原子上限檢查，成功且用量可信時才保守結算。失敗或用量不明不退預留，不為驗收重置帳本。每日及累計上限目前均US$2；詳細模型價格與限制見 [供應商預算](PROVIDER-BUDGET.md)。沒有來源時拒答／追問；模型回覆格式或引用不合法時走失敗出口。來源ID存在不代表語意有支持，另以QA集驗收。
+Agent 每次執行由 `$now.setZone('Asia/Taipei')` 注入日期、星期、時間及 UTC+08:00；今天／明天不依舊記憶或訓練日期。LINE push 統一轉純文字，保留 URL、程式碼與一般底線／乘號。
 
 ## 7. 部署與儲存
 
-本機Compose包括固定n8n 2.41.7、PostgreSQL／pgvector、歷史mock gateway及loopback管理proxy；正式overlay另部署gateway與school-adapter。n8n metadata與Agent資料使用不同database／role。`campus_agent`保存正式身分、inbox／task／outbox、學校與LIFF session、Memory、來源版本及知識庫staging／chunks，不與n8n credential tables混用。
+根目錄 `docker-compose.yml` 是唯一 Compose 入口，`Dockerfile` 提供必要映像建置；不使用 infra 目錄或多層 overlay。固定 n8n 2.41.7；服務名稱、資料 volume 與 Compose project identity 保持既有環境相容，不因整理目錄重建或清空資料。
 
-合成基礎網路不外連；正式overlay已套用連外與provider設定。這不是Docker層供應商網域allowlist；官方reader及學校client各自執行固定host／DNS／redirect檢查。公開ingress只提供LIFF與LINE所需路徑，internal／provider路徑不對外代理。遠端Linux正式主機仍未部署；本機Docker VM不能視為正式主機。
+新空 n8n metadata database 在 server 啟動前，由 `n8n-init` 使用同版本官方 CLI 建立四組加密 credentials、匯入兩個正式流程並發布主流程；語料流程不自動執行。秘密只經環境變數與 stdin 傳入，不落匯入檔。首次 owner 仍由 editor 設定。初始化以 PostgreSQL advisory lock 與 `campus_bootstrap.state` 狀態保護；已有 metadata schema 或完整初始化標記時只讀略過，中斷留下 pending 並阻止自動重試，避免覆寫人工修改。既有環境不自動升級工作流或同步 `.env` 到 credentials。
 
-## 8. 驗收與後續
+n8n metadata 與 Agent 使用不同 database／role。Agent DB 保存正式身分、inbox／task／outbox、LIFF／學校 session、Memory、來源版本、staging／chunks。SQL migration 屬應用 schema，不屬 mock；更新須核對 checksum，不接受未知既有 schema。已套用的歷史 migration checksum 不改寫；其中舊費用帳本 schema 僅為相容既有資料保留，現行服務不再讀寫。部署操作不得使用 `down -v` 或重置資料。
 
-- 結構：原生 Agent、model、memory、vector、embedding 與直接 HTTP 工具型別、版本與接線正確；主流程沒有 toolWorkflow。
-- 本機：資料庫可用、memory session 隔離、HTTP 權限／期限／去重與輸出驗證，實際 n8n 匯入與畫布。
-- 外部已有證據：真Gemini／embedding與原生PGVector、HTML／PDF匯入、官方LINE webhook驗證及匿名校方連線／Linux OCR格式測試；公開QA只完成部分，詳見逐題報告。
-- 仍待驗證：完整公開QA、Google 官方搜尋付費實測與 LIFF 呈現、LINE實際回覆、本人校務登入及真實課表／缺曠／公告、多輪與混合回覆。
-- 使用者指定目前只開放本人，雙真人隔離驗收延後；合成隔離、撤銷／重送／過期來源／費用到頂測試不能當作真人驗收。備份／復原、完整重啟負載及遠端部署仍屬未完成Phase6。
+gateway 僅綁定 host loopback 3100，school-adapter 無 host port；n8n 管理入口僅 loopback。公開 host ingress 與 tunnel 是獨立程序，只公開 LINE／LIFF 路徑。秘密集中根 `.env`，不進 build context、Git 或工作流 JSON。
 
-[工作流規格](WORKFLOWS.md) · [RAG](RAG.md) · [Roadmap](ROADMAP.md) · [操作說明](NATIVE-AGENT.md)
+目前是本機 Docker 加受限公開 ingress，不是遠端正式 Linux 部署。健康檢查、typecheck、靜態圖結構或合成測試都不能代替真人 LINE／LIFF、模型語意、搜尋整合、隔離、負載及備份還原驗收。
