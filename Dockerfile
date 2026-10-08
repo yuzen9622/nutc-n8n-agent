@@ -44,3 +44,10 @@ COPY --chown=node:node apps/gateway/migrations ./apps/gateway/migrations
 COPY --chown=node:node scripts/migrate-live-database.mjs scripts/env.mjs ./scripts/
 USER node
 CMD ["node", "dist/apps/gateway/src/server.js"]
+
+# Only the tunnel target includes cloudflared; the host needs Docker, not Node/pnpm.
+FROM cloudflare/cloudflared:2026.6.1@sha256:6d91c121b803126f7a5344005d17a9324788fc09d305b6e2560ec6040a7ae283 AS cloudflared
+FROM live AS tunnel
+COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
+COPY --chown=node:node scripts/start-tunnel.mjs ./scripts/
+CMD ["node", "scripts/start-tunnel.mjs"]

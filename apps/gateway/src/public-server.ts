@@ -14,7 +14,9 @@ const liffId = process.env.LIFF_ID;
 if (liffId && (!/^\d+-[A-Za-z0-9]+$/.test(liffId) || !liffId.startsWith(`${process.env.LINE_LOGIN_CHANNEL_ID}-`))) {
   throw new Error('INVALID_LIFF_ID');
 }
-const server=createServer(publicRouter(origin,liffId));
+const gatewayOrigin=process.env.PUBLIC_GATEWAY_ORIGIN??'http://127.0.0.1:3100';
+const host=z.enum(['127.0.0.1','0.0.0.0']).parse(process.env.PUBLIC_HOST??'127.0.0.1');
+const server=createServer(publicRouter(origin,liffId,fetch,gatewayOrigin));
 server.requestTimeout=45000;server.headersTimeout=15000;
-server.listen(3101,'127.0.0.1',()=>console.log('Public LINE/LIFF ingress ready on loopback port 3101'));
+server.listen(3101,host,()=>console.log('Public LINE/LIFF ingress ready on port 3101'));
 for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{server.close();server.closeIdleConnections();});

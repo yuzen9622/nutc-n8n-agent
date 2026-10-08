@@ -155,7 +155,7 @@ services:
       GEMINI_EMBEDDING_MODEL:
         ${GEMINI_EMBEDDING_MODEL:-models/gemini-embedding-001}
     ports: ['127.0.0.1:3100:3100']
-    networks: [synthetic, management]
+    networks: [synthetic, management, ingress-gateway]
     depends_on:
       migrate: {condition: service_completed_successfully}
       school-adapter: {condition: service_healthy}
@@ -198,8 +198,67 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+  public-ingress:
+    <<: *live
+    command: [node, dist/apps/gateway/src/public-server.js]
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Required}
+      LIFF_ID: ${LIFF_ID:?Required}
+      LINE_LOGIN_CHANNEL_ID: ${LINE_LOGIN_CHANNEL_ID:?Required}
+      PUBLIC_HOST: 0.0.0.0
+      PUBLIC_GATEWAY_ORIGIN: http://gateway:3100
+    # No host port: only the tunnel reaches the allowlisted LINE/LIFF surface.
+    networks: [public, ingress-gateway]
+    depends_on:
+      gateway: {condition: service_healthy}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const host=new URL(process.env.PUBLIC_ORIGIN).host;
+          require('node:http').get('http://127.0.0.1:3101/liff/',
+          {headers:{host}},r=>{r.resume();if(r.statusCode!==200)process.exit(1)})
+          .on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 10
+  tunnel:
+    <<: *live
+    image: campus-agent-tunnel:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: tunnel
+    command: [node, scripts/start-tunnel.mjs]
+    environment:
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Required}
+      TUNNEL_CRED_CONTENTS: ${TUNNEL_CRED_CONTENTS:?Required tunnel credentials}
+      TUNNEL_INGRESS_ORIGIN: http://public-ingress:3101
+    tmpfs: ['/tmp:size=16m,mode=1777']
+    networks: [public, egress]
+    depends_on:
+      public-ingress: {condition: service_healthy}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:20311/ready')
+          .then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 30s
 networks:
   management:
+  public:
+    internal: true
+  ingress-gateway:
+    internal: true
+  egress:
   # Historical network name retained for compatibility; no mock services remain.
   synthetic:
     internal: true
