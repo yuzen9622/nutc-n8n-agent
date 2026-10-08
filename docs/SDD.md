@@ -1,6 +1,6 @@
 # 校園 n8n AI Agent 系統設計
 
-更新：2026-10-07。實作進度與未完成驗收見 [Roadmap](ROADMAP.md)，部署見 [README](../README.md)。文件僅保留設計與路線圖，歷史 mock 與 Phase 1 驗證資產不再交付。
+更新：2026-10-08。實作進度與未完成驗收見 [Roadmap](ROADMAP.md)，部署見 [README](../README.md)。文件僅保留設計與路線圖，歷史 mock 與 Phase 1 驗證資產不再交付。
 
 ## 1. 目的與範圍
 
@@ -94,6 +94,6 @@ Agent 每次執行由 `$now.setZone('Asia/Taipei')` 注入日期、星期、時�
 
 n8n metadata 與 Agent 使用不同 database／role。Agent DB 保存正式身分、inbox／task／outbox、LIFF／學校 session、Memory、來源版本、staging／chunks。SQL migration 屬應用 schema，不屬 mock；更新須核對 checksum，不接受未知既有 schema。已套用的歷史 migration checksum 不改寫；其中舊費用帳本 schema 僅為相容既有資料保留，現行服務不再讀寫。部署操作不得使用 `down -v` 或重置資料。
 
-gateway 僅綁定 host loopback 3100，school-adapter 無 host port；n8n 管理入口僅 loopback。公開 host ingress 與 tunnel 是獨立程序，只公開 LINE／LIFF 路徑。秘密集中根 `.env`，不進 build context、Git 或工作流 JSON。
+gateway 僅綁定 host loopback 3100，school-adapter 無 host port；n8n 管理入口僅 loopback。公開入口 `public-ingress` 與 `tunnel` 都由同一 Compose 啟動、健康檢查及自動重啟，不需主機 Node.js／pnpm／cloudflared 或額外程序。ingress 僅代理固定 gateway 與 LINE／LIFF 路徑；兩者沒有 host port，也不加入後端 management network。ingress 以獨立 internal network 連 gateway，不與 n8n／school-adapter／Postgres 共用網路。Tunnel ID 從根 `.env` 的 locally-managed `TUNNEL_CRED_CONTENTS` JSON 取得，hostname 從 `PUBLIC_ORIGIN` 取得；只產生不含秘密的暫存設定。Tunnel 等待 ingress 健康，並以 cloudflared `/ready` 檢查 Cloudflare 連線。新網域的 DNS／Tunnel 由管理者先設定，程式不修改 Cloudflare 帳戶。秘密集中根 `.env`，不進 build context、Git 或工作流 JSON。
 
 目前是本機 Docker 加受限公開 ingress，不是遠端正式 Linux 部署。健康檢查、typecheck、靜態圖結構或合成測試都不能代替真人 LINE／LIFF、模型語意、搜尋整合、隔離、負載及備份還原驗收。

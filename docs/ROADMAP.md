@@ -1,11 +1,11 @@
 # 校園 AI Agent Roadmap
 
-更新：2026-10-07。正式流程採原生 n8n Agent；先本機 Docker，穩定後再部署遠端。部署入口為根目錄 `Dockerfile` 與 `docker-compose.yml`，操作指令見 [README](../README.md)，設計見 [SDD](SDD.md)。不再保留 Phase 1 mock 程式、合成工作流與歷史驗證文件。
+更新：2026-10-08。正式流程採原生 n8n Agent；先本機 Docker，穩定後再部署遠端。部署入口為根目錄 `Dockerfile` 與 `docker-compose.yml`，操作指令見 [README](../README.md)，設計見 [SDD](SDD.md)。不再保留 Phase 1 mock 程式、合成工作流與歷史驗證文件。
 
 | Phase | 範圍 | 目前狀態 |
 |---|---|---|
 | 0 | 原生 Agent、模型、記憶與工具設計 | 已建立正式設計基線 |
-| 1 | 本機部署、原生畫布與獨立 Agent DB | 已建立；歷史 mock 資產移除 |
+| 1 | 本機部署、原生畫布與獨立 Agent DB | 已建立；新空環境自動匯入／發布；LINE／LIFF ingress 與 Tunnel 納入同一 Compose，不需額外 host 程序 |
 | 2 | LINE／LIFF、身分、持久任務與多輪對話 | 已發布並啟用 worker；公開自動註冊及本人校務綁定已部署；雙真人端到端驗收未完成 |
 | 3 | Gemini、PGVector 與公開搜尋 | 真 Gemini／Embeddings 與官方 HTML／PDF 語料匯入、檢索已驗證；Google Search 保持停用，完整 40 題問答驗收未完成 |
 | 4 | 學校登入與本地 OCR | ePortal／AIS 真登入、加密持久 session 與課表／缺曠／公告查詢已驗證 |
