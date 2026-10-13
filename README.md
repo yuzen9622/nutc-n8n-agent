@@ -27,107 +27,88 @@
 
 ## 部署
 
-### 1. 準備環境
+### 1. 填妥設定
 
-- Git、Docker 與 Docker Compose v2。**部署主機不需要 Node.js、pnpm 或 cloudflared**；映像會自動建置。
-- LINE Messaging／Login Channel、LIFF 設定及 Google Gemini API key。
-- 已建立的 Cloudflare Tunnel credentials JSON 與公開 HTTPS 網域；DNS 須指向該 Tunnel。
-
-新環境建立根 `.env`；已存在時不複製、不覆寫：
+準備 Git、Docker／Compose v2、LINE Messaging／Login Channel、LIFF、Google API key，以及 Cloudflare Tunnel 的 connector token 與已綁定的 HTTPS 網域。部署主機不需要 Node.js、pnpm 或 cloudflared。
 
 ```sh
 if [ ! -e .env ]; then cp .env.example .env; fi
 chmod 600 .env
 ```
 
-啟動前依 `.env.example` 填妥設定：
+依 `.env.example` 填妥：
 
+| 設定 | 用途 |
+|---|---|
+| `POSTGRES_PASSWORD` | 三個 PostgreSQL role 共用密碼，database／role 仍隔離 |
+| `APP_MASTER_KEY` | 64 hex，衍生內部驗證及校務加密金鑰 |
+| `N8N_ENCRYPTION_KEY` | n8n credentials 加密 |
+| LINE／LIFF 欄位 | Channel IDs、secret、access token、destination、LIFF ID；替換範例值 |
+| `PUBLIC_ORIGIN`／`CLOUDFLARE_TUNNEL_TOKEN` | 公開 HTTPS origin／Dashboard connector token |
+| `GOOGLE_SEARCH_ENABLED` | 預設 false，完成搜尋驗收後才啟用 |
 
-| 設定群組      | 必要內容                                                                                                            |
-| --------- | --------------------------------------------------------------------------------------------------------------- |
-| 資料庫       | `POSTGRES_PASSWORD`、`DB_POSTGRESDB_PASSWORD`、`AGENT_DB_PASSWORD`、兩個資料庫 URL 與 `N8N_ENCRYPTION_KEY`               |
-| 內部驗證      | 各自獨立、至少 32 字元的 `SESSION_SECRET`、`SERVICE_TOKEN`、`N8N_WEBHOOK_TOKEN`、`GEMINI_PROXY_TOKEN`、`SCHOOL_SERVICE_TOKEN` |
-| LINE／LIFF | Channel ID、`LINE_DESTINATION`、Channel secret、access token、`LIFF_ID` 與 HTTPS `PUBLIC_ORIGIN`；新專案須替換範例中的既有 ID     |
-| 校務加密      | `SCHOOL_SESSION_KEY` 為 64 字元十六進位 AES-256 key；另設定 `SCHOOL_ACCOUNT_HASH_KEY`                                      |
-| Gemini    | Chat／embedding key 與模型；範例已指定模型，不能只留空 key 就啟動                                                       |
-| 公開入口 | `TUNNEL_CRED_CONTENTS`：單行 Cloudflare credentials JSON，以單引號包住；`PUBLIC_ORIGIN` 須對應 Tunnel 的公開網域 |
+Google key 與模型只在 n8n editor 設定，不放 `.env`。`N8N_BASE_URL`／owner 維護憑證為選用，不會自動建立 owner。模型費用由供應商計收，請自行管理帳務。
 
+**既有資料先備份：不可清空 volumes、直接換金鑰或覆寫 `.env`。project name 現為 `nutc-agent`，改名不會搬移舊 volumes；須核對並受控遷移。修改 `.env` 也不會自動更新既有 DB role 密碼；保留原 `N8N_ENCRYPTION_KEY`。**
 
-`DATABASE_URL`／`SCHOOL_DATABASE_URL` 在 Docker 中須指向 `postgres:5432/campus_agent`，使用 `campus_agent` role 與 `AGENT_DB_PASSWORD`。建議密碼為隨機十六進位字串，務必替換兩個 URL 的 placeholder；其他字元須 URL 編碼。
-
-gateway 啟動時會自動啟動任務 worker，不需要額外開關。模型與 embedding 呼叫依供應商計費，應用程式不設定費用上限；請在 Google Cloud 管理帳務與 API 使用量。
-
-### 2. 啟動容器
+### 2. 啟動五個服務
 
 ```sh
-docker compose up -d --build --remove-orphans --wait --wait-timeout 600
-```
-
-**填好 `.env` 後，上面一個指令就會啟動整套服務，包含 LINE／LIFF 公開入口及 Tunnel，不需要另外開 host 程序。** `--wait` 會等待服務健康；Tunnel 健康檢查確認已連上 Cloudflare，不只是程序存活。
-
-Compose 依序執行 PostgreSQL／pgvector、checksum migration、一次性 `n8n-init`，再啟動 n8n、school-adapter、gateway、public-ingress 與 tunnel。新空 n8n database 會自動建立四組 credentials、匯入兩個正式工作流並發布主流程，不需要手動匯入 JSON。只有空 volume 才建立獨立的 `n8n`／`campus_agent` database 及 role；既有 volume 不重建資料。
-
-既有環境保留 `campus-phase1` project name、`postgres_data`／`n8n_data` volume 與網路名稱。`--remove-orphans` 會移除同專案已淘汰的 admin-proxy，釋放舊管理埠給 n8n 直接 loopback 綁定。不要執行 `docker compose down -v`，避免刪除既有資料。所有秘密集中 `.env`，不印出完整 Compose config、不提交 Git。
-
-啟動後檢查服務狀態與 readiness：
-
-```sh
+docker compose up -d --build --wait --wait-timeout 600
 docker compose ps
-curl --fail http://127.0.0.1:3100/health/live
-curl --fail http://127.0.0.1:15679/healthz/readiness
 ```
 
-`migrate`、`n8n-init` 成功執行後退出是正常狀態。Docker 會管理常駐服務並在主機 Docker 恢復時自動啟動；主機需設定 Docker 開機啟動。健康檢查不代表 LINE、校務或模型已完成端到端驗收。
+Compose 啟動 `postgres`、`n8n`、`gateway`、`school-adapter`、`cloudflared`。兩個 backend 先執行既有 checksum migration，再 exec server；沒有獨立 migrate service。官方 n8n 2.41.7 只等待 PostgreSQL healthy，自行初始化 metadata，**不自動匯入或發布工作流**。gateway 同時啟動 worker 與公開入口。
 
-若從舊的 host 程序切換，先停止自己啟動的 `pnpm start:public`／`pnpm start:tunnel`，避免新舊入口同時承接流量。沿用同一 Tunnel 搬到另一台主機時，也須先安排舊主機停機切換。
+`--wait` 只確認四個服務的 healthcheck 及 cloudflared running；Tunnel 是否真正連線另查：
 
-### 3. 開啟 n8n
+```sh
+docker compose exec gateway node -e "fetch('http://cloudflared:20311/ready').then(r=>{console.log(r.status);process.exit(r.ok?0:1)})"
+```
 
-遠端 Linux 主機請先在自己的電腦執行 `ssh -N -L 15679:127.0.0.1:15679 使用者@主機`，再開 `http://localhost:15679`；不要公開管理埠。
+應回傳 200。容器啟動不代表 Bot 配置完成，繼續下一步。
 
-新 instance 首次開啟 `http://localhost:15679` 建立 n8n owner，即可看到自動匯入的兩個流程；不需要手動匯入或設定下列 credentials。owner 帳號仍由你在 editor 建立，`.env` 的 `N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` 只供完成設定後的本機維護腳本使用。
+### 3. 首次設定 n8n
 
+開啟 `http://localhost:15679` 建立 owner，再於 repo 根目錄執行：
 
-| 工作流                                                                        | 用途                          |
-| -------------------------------------------------------------------------- | --------------------------- |
-| [`campusNativeAgentLive.json`](workflows/agent/campusNativeAgentLive.json) | LINE 任務的原生 Agent、記憶、檢索與校務工具 |
-| [`campusKnowledgeIngest.json`](workflows/agent/campusKnowledgeIngest.json) | 管理者手動匯入核定官方語料               |
+```sh
+bash scripts/setup-n8n.sh
+```
 
+腳本只使用 Docker：產生三組內部 credentials，經 stdin 交給同版本 [官方 CLI](https://docs.n8n.io/hosting/scaling/cli/)，匯入三個**未啟用**工作流，不發布、不執行 ingest。
 
+| 工作流 | 用途 |
+|---|---|
+| [`campusNativeAgentLive`](workflows/agent/campusNativeAgentLive.json) | LINE Agent、記憶、RAG 與校務工具 |
+| [`campusKnowledgeIngest`](workflows/agent/campusKnowledgeIngest.json) | 手動匯入官方語料 |
+| [`campusGoogleSearch`](workflows/agent/campusGoogleSearch.json) | 獨立 Google Search Grounding |
 
-| credential ID              | 設定                                                                                            |
-| -------------------------- | --------------------------------------------------------------------------------------------- |
-| `campus-agent-postgres`    | Postgres：host `postgres`、DB／user `campus_agent`、密碼 `AGENT_DB_PASSWORD`                        |
-| `campus-live-service`      | HTTP Header Auth：`X-Campus-Service` = `SERVICE_TOKEN`                                         |
-| `campus-live-webhook`      | HTTP Header Auth：`X-Campus-Webhook` = `N8N_WEBHOOK_TOKEN`                                     |
-| `campus-live-gemini-proxy` | Google Gemini：內部 proxy token `GEMINI_PROXY_TOKEN`，host `http://gateway:3100/providers/gemini` |
+| credential ID | 自動匯入設定 |
+|---|---|
+| `campus-agent-postgres` | host `postgres`、DB／user `campus_agent`、`POSTGRES_PASSWORD` |
+| `campus-live-service` | `X-Campus-Service`，master key 衍生 token |
+| `campus-live-webhook` | `X-Campus-Webhook`，master key 衍生 token |
 
+owner 在 editor 建立 **Google Gemini (PaLM)** credential，使用官方 host `https://generativelanguage.googleapis.com`；選取 main 的 Chat Model／Embeddings、ingest 的 Embeddings、search 的 HTTP Request 節點。模型由 n8n 管理；embedding 保持 `models/gemini-embedding-001`／3072 維。
 
-`campusNativeAgentLive` 在新環境已自動發布；`campusKnowledgeIngest` 維持手動執行，不會在啟動時抓取網站或呼叫 Gemini。兩個流程不是兩個 Bot：一個負責使用者對話，另一個負責建立／更新官方知識庫。公開知識庫仍需管理者在 editor 手動執行語料流程建置，初始化不代表已存在知識內容。接通正式 LINE 流量前確認 editor、語料與實際整合。
+保存並發布 main／search，再手動執行 ingest。確認語料、搜尋與實際回答後才接正式流量。三個流程分別處理對話、語料、搜尋，不是三個 Bot。
 
-初始化使用 [n8n 官方 CLI](https://docs.n8n.io/hosting/scaling/cli/)；credentials 經 stdin 匯入、由 n8n 加密保存，不產生含秘密的匯入檔。已初始化或已有 metadata schema 的 database 只讀略過，不覆寫畫布、credentials 或發布狀態；`git pull` 不會自動更新資料庫中的流程，既有環境更新仍須明確確認並操作。
+**任一目標 workflow／credential ID 已存在，setup 即拒絕，不覆寫、不使用 bootstrap state／pending。** 重跑或匯入中斷時先備份並核對現有內容，再由管理者手動處理；不要清庫重試。`git pull` 不會更新 n8n 中的流程。
 
-若初始化中斷，`n8n-init` 會報 `BOOTSTRAP_INCOMPLETE` 或帶有階段的錯誤碼（例如 `BOOTSTRAP_CLI_IMPORT_CREDENTIALS_FAILED`、`BOOTSTRAP_CLI_IMPORT_WORKFLOW_FAILED`、`BOOTSTRAP_CLI_PUBLISH_WORKFLOW_FAILED`），並阻止新 server 啟動，避免盲目重跑覆寫半完成的資料。可用 `docker compose logs n8n-init` 查看安全階段資訊，不輸出 CLI 原文或秘密。缺設定在寫入前會報 `BOOTSTRAP_REQUIRED_*`，補妥設定後可重試；已有 pending 時先備份、由管理者核對失敗階段與已匯入內容，再在已知 instance 手動復原並驗證，不由程式自動重匯入。不要刪除 volume、狀態標記或重置資料來繞過保護。既有環境未自動匯入時，請先備份與確認 instance，再由 editor 匯入／設定／發布，不能把未知 instance 當新環境。
+遠端 editor 請透過 `ssh -N -L 15679:127.0.0.1:15679 使用者@主機` 存取，不公開管理埠。
 
-worker 已隨 gateway 自動啟動，不需要額外啟用旗標。語料匯入流程只手動啟動；不能以節點存在代替整合驗收。
-
-### 4. 設定 LINE／LIFF 公開入口
-
-公開入口與 Cloudflare Tunnel **已由 Compose 自動啟動**，不用再執行 `pnpm start:public`／`pnpm start:tunnel`。受限 ingress 不暴露 n8n、school-adapter 或 internal／provider API。
-
-Tunnel ID 從 `.env` 的 `TUNNEL_CRED_CONTENTS` 取得，hostname 從 `PUBLIC_ORIGIN` 取得，不綁定特定主機或既有網域。此設定使用 locally-managed Tunnel credentials JSON（含 `AccountTag`、`TunnelID`、`TunnelSecret`），不是 dashboard connector token；新 Tunnel／DNS 須由管理者先建立，Compose 不修改 Cloudflare 帳戶設定。
+### 4. 設定公開網址
 
 ```text
-LINE／LIFF → tunnel 容器 → public-ingress 容器 :3101 → gateway 容器 :3100
+LINE／LIFF → cloudflared → gateway:3101（同 process 的受限 publicRouter）
 ```
 
-公開 ingress 與 tunnel 都沒有 host port；只有 tunnel 可從公開網路接收流量。ingress 只加入公開入口與 gateway 專用網路，不與 n8n、校務 adapter 或資料庫共用網路。
+Compose 的官方 cloudflared 使用 `TUNNEL_TOKEN`，command 固定 `--url http://gateway:3101`；無 remote ingress 時也有明確 origin。若 Dashboard 配置 remote ingress，origin 同樣設為 **`http://gateway:3101`**，不能用 private `3100` 或 localhost；公開 hostname 須符合 `PUBLIC_ORIGIN`。
 
-LINE Messaging webhook 設為 `${PUBLIC_ORIGIN}/line/webhook`，LIFF endpoint 設為 `${PUBLIC_ORIGIN}/liff/`；LINE Login Channel 須為 Published，且 LIFF 必須屬於設定的 Login Channel。上述 URL 中的 `${PUBLIC_ORIGIN}` 請替換成實際 HTTPS origin。
+LINE webhook 設 `${PUBLIC_ORIGIN}/line/webhook`，LIFF endpoint 設 `${PUBLIC_ORIGIN}/liff/`。Login Channel 須 Published，LIFF 須屬於該 Channel；將 `${PUBLIC_ORIGIN}` 換成實際 HTTPS origin。
 
-n8n 管理入口與 gateway 僅綁定 loopback，school-adapter 無 host port。Tunnel 等待 gateway 與 ingress 健康後才啟動；公開 ingress 拒絕非 LINE／LIFF 路徑，不得以直接公開 n8n 或 gateway 所有路由替代。
-
-這是全新安裝流程。**搬遷舊資料不是全新安裝**：先備份與還原原資料庫／volume，保留原 `N8N_ENCRYPTION_KEY` 與其他加密金鑰、密碼；不要拿新的 `.env` 搭配舊資料。備份還原與正式遠端驗收仍依 Roadmap 執行。
+兩個網路為 `backend`／`public`，cloudflared 只加入 public。n8n `15679`、gateway private `3100` 僅綁 loopback；public `3101` 無 host port，publicRouter 限制 host／path，不暴露 internal API。Tunnel／DNS 由管理者配置，不需另開 host 程序。
 
 ## 開發與檢查
 
@@ -135,7 +116,7 @@ n8n 管理入口與 gateway 僅綁定 loopback，school-adapter 無 host port。
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm generate       # 僅生成正式 Agent／語料工作流，不匯入或發布
+pnpm generate       # 僅生成正式 Agent／搜尋／語料工作流，不匯入或發布
 pnpm check
 pnpm build
 pnpm db:migrate:live # 已運行的已知本機 DB；核對 checksum，不清空資料
@@ -145,7 +126,7 @@ pnpm test:school:database
 
 `pnpm check` 包含 TypeScript 型別檢查、回歸測試及工作流 artifact 檢查；資料庫整合檢查需使用已知本機環境。工作流修改後，須在固定 n8n 2.41.7 runtime 實跑並確認 editor，靜態檢查不能代替畫布驗收。
 
-正式工作流的來源是 `scripts/generate-live-agent-workflow.mjs` 與 `scripts/generate-knowledge-workflow.mjs`。修改 generator 後，需一併交付生成的 JSON；生成本身不會匯入或發布，也不能覆寫未知 n8n instance 的工作流。
+正式工作流的來源是 `scripts/generate-live-agent-workflow.mjs`（main／search）與 `scripts/generate-knowledge-workflow.mjs`（ingest）。修改 generator 後，需一併交付生成的 JSON；生成本身不會匯入或發布，也不能覆寫未知 n8n instance 的工作流。
 
 保留正式回歸測試及必要診斷腳本；臨時驗證輸出寫入忽略的 `.local/verification/`，不納入 docs。
 
@@ -153,11 +134,11 @@ pnpm test:school:database
 
 ```text
 apps/
-  gateway/          LINE、LIFF、任務、工具權限、模型代理與派送
+  gateway/          LINE、LIFF、任務、工具權限、搜尋委派與派送
     migrations/    正式 Agent DB SQL migration
   school-adapter/  校務登入、本地 OCR 與本人 session 查詢
 scripts/           工作流生成、資料庫 migration 與整合診斷
-workflows/agent/   兩個正式 n8n 工作流 JSON
+workflows/agent/   三個正式 n8n 工作流 JSON
 tests/            正式回歸測試
 docs/
   SDD.md           系統設計
@@ -179,17 +160,20 @@ n8n 負責原生 Agent、模型、記憶及檢索；gateway 負責驗簽、身�
 
 ## 排錯與後續開發
 
+backend 啟動 migration 與 server 都核對 master key fingerprint；缺 marker 或換 key 會停止，不會自動重加密。不可刪 marker 繞過，先備份並安排受控遷移。
+
 
 | 狀況               | 優先檢查                                                                  |
 | ---------------- | --------------------------------------------------------------------- |
-| gateway 無法啟動     | `.env` 是否填妥、秘密是否符合長度與獨立性要求、Gemini 與 n8n 派送設定是否完整                      |
+| gateway 無法啟動 | `.env` 是否填妥、master key 是否為 64 hex、n8n 派送設定是否完整 |
 | migration 失敗     | 資料庫 URL、role 密碼與 migration checksum；不要刪除 volume 或修改既有 migration 來繞過檢查 |
+| `EXISTING_DATA_REQUIRES_KEY_MIGRATION`／`APP_MASTER_KEY_CHANGED` | 主密鑰保護強制停止並 rollback；先核對原金鑰與受控遷移方案，不可刪除 fingerprint marker 繞過 |
 | LINE 沒有 Agent 回覆 | 工作流是否發布、credential 與 n8n 派送 URL 是否正確，以及服務是否 healthy            |
 | LIFF 無法登入或綁定     | HTTPS origin、LIFF／Login Channel 是否一致、Published 狀態與校務 session 是否有效     |
 | 搜尋沒有結果           | Google Search 預設停用；啟用後需確認供應商支援與真實搜尋結果，費用由供應商計收                            |
-| Tunnel 無法健康啟動 | 檢查 `docker compose logs tunnel`、credentials JSON、網路是否可連 Cloudflare；DNS 與 `PUBLIC_ORIGIN` 是否對應 |
+| Tunnel 連線失敗／503 | 檢查 `docker compose logs cloudflared`、token、`/ready` 與 Dashboard；origin 必須為 `http://gateway:3101` |
 
-`restart: unless-stopped` 處理程序退出／Docker 重啟，不會因單純 unhealthy 而重啟。cloudflared 會自行重連；若網路恢復後仍長期 unhealthy，先檢查日誌與設定，再執行 `docker compose restart tunnel`。修改 `.env` 後則重新執行部署指令，不能只 restart 以期待新環境變數生效。
+`restart: unless-stopped` 處理退出／Docker 重啟，不會因 unhealthy 而重啟。cloudflared 會自行重連；持續斷線先查日誌，再視需要 `docker compose restart cloudflared`。一般環境變數更新須重建容器，不是只 restart；密碼、金鑰及 volume 變更須先遷移。
 
 
 從 [系統設計](docs/SDD.md) 確認責任與安全契約，再依 [Roadmap](docs/ROADMAP.md) 選擇尚未完成的工作。提交變更前執行 `pnpm check`、`pnpm build`；涉及工作流時補上真實 runtime 與 editor 驗收，並清楚區分真實整合、合成測試與未執行項目。

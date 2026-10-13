@@ -1,6 +1,6 @@
 # 校園 n8n AI Agent 系統設計
 
-更新：2026-10-08。實作進度與未完成驗收見 [Roadmap](ROADMAP.md)，部署見 [README](../README.md)。文件僅保留設計與路線圖，歷史 mock 與 Phase 1 驗證資產不再交付。
+更新：2026-10-13。部署操作見 [README](../README.md)，本輪部署驗收與歷史模型證據分列於 [Roadmap](ROADMAP.md)。目前採五服務 Compose、手動首次設定 n8n，未完成遠端正式部署或完整真人驗收。
 
 ## 1. 目的與範圍
 
@@ -14,11 +14,11 @@ LINE Messaging Channel 為 `2011885580`，Login Channel 為 `2011885607`，LIFF 
 
 | 元件 | 責任 |
 |---|---|
-| gateway | LINE raw-body 驗簽、身分、LIFF session／CSRF、持久任務、工具權限、模型代理、outbox 派送 |
+| gateway | private 3100 與 public 3101 同 process；LINE raw-body 驗簽、LIFF、任務、工具權限、搜尋委派、來源／render 驗證及 outbox 派送 |
 | school-adapter | 校務登入、本地 OCR、Cookie 與本人校務查詢；內部 API 不對外公開 |
-| n8n | 原生 Agent、工具選擇、對話記憶、公開語料匯入及檢索 |
+| n8n | 原生 Agent、工具選擇、對話記憶、公開語料匯入及檢索、直接 Google chat／embeddings／Search 呼叫 |
 | PostgreSQL／pgvector | 獨立 n8n metadata DB 與 Agent DB；身分、任務、session、Memory、語料 |
-| 受限公開 ingress | 僅 LINE／LIFF 所需路徑；不轉送 internal、provider 或 n8n 管理路徑 |
+| cloudflared／publicRouter | Tunnel 指向 gateway:3101；publicRouter 限制 host／path，不暴露 internal、provider 或 n8n 管理路徑 |
 
 ```mermaid
 flowchart LR
@@ -40,11 +40,11 @@ flowchart LR
   GW --> SA[School adapter]
 ```
 
-正式主流程 `campusNativeAgentLive` 由 `scripts/generate-live-agent-workflow.mjs` 產生；官方語料流程 `campusKnowledgeIngest` 由 `scripts/generate-knowledge-workflow.mjs` 產生。JSON 不含秘密，僅保存 credential 參照。生成不等於匯入、發布或驗收；新空環境的匯入與發布由 Docker 一次性初始化負責，不覆寫未知 instance／使用者畫布。
+正式主流程 `campusNativeAgentLive` 與搜尋流程 `campusGoogleSearch` 由 `scripts/generate-live-agent-workflow.mjs` 產生；官方語料流程 `campusKnowledgeIngest` 由 `scripts/generate-knowledge-workflow.mjs` 產生。JSON 不含秘密；內部 credential 保存參照，Google 節點不放假 credential 參照，須由 owner 在 editor 建立及選取真 credential。生成不等於匯入、發布或驗收。owner 建立後手動執行 `bash scripts/setup-n8n.sh`，匯入三組內部 credentials 與三個 inactive 流程；任一目標 ID 已存在即拒絕，不覆寫使用者畫布。
 
 主流程採 Webhook → prepare／整理訊息 → Agent → completion → 回覆。原生節點包含 Gemini Chat Model、Postgres Chat Memory、PGVector Store、Gemini Embeddings，以及 student_schedule、student_absence、student_announcements、student_grades、student_leave、student_send_mail 與 official_search。各工具固定端點及操作；模型只填允許的業務參數，不得提供使用者識別、任意 URL 或 capability。
 
-正式流程不保存 n8n execution 原文。Agent maxIterations=5、timeout=90 秒，HTTP 工具每任務最多四次；此上限用於執行資源控制，不涵蓋所有原生工具。
+正式流程不保存 n8n execution 原文。Agent maxIterations=5、timeout=90 秒，HTTP 工具每任務最多四次；此上限用於執行資源控制，不涵蓋所有原生工具。gateway worker 維持 5 並行；n8n production concurrency 為 10，提供 5 個 main 與 5 個 nested search 執行容量，避免所有 main 等待 queued child search。
 
 ## 3. 身分、任務與記憶
 
@@ -68,13 +68,13 @@ ASP.NET ViewState／captcha／CookieJar 協定由獨立 adapter 處理，本地 
 
 ## 5. 公開語料與搜尋
 
-原生生成模型為 `models/gemini-3.8-flash`，embedding 為 `models/gemini-embedding-001`／3072 維。n8n credential 持有內部 proxy token 與 host，供應商原始 key 僅由 gateway 從根 `.env` 讀取。
+原生生成模型為 `models/gemini-3.8-flash`，embedding 維持資料相容的 `models/gemini-embedding-001`／3072 維，不擅自更換。所有 Google keys／模型僅在 n8n 管理，gateway 不代理 Google 模型，根 `.env` 不設定 Google key／模型。owner 在 editor 建立 Google Gemini (PaLM) credential，使用官方 host `https://generativelanguage.googleapis.com`，為 main 的 Chat Model／Embeddings、ingest 的 Embeddings 及 search 的 HTTP Request 選取，保存並發布 main／search 後再手動 ingest。
 
 官方語料初始網域為 `www.nutc.edu.tw`、`aca.nutc.edu.tw`、`student.nutc.edu.tw`、`elib.nutc.edu.tw`。管理者手動啟動匯入：固定官方 reader → hash 去重 → 原生 Gemini Embeddings → PGVector staging → 整批驗證／原子發布。只接受核定並取得原文的來源。
 
 completion 核對本次 native observation 的來源版本、chunkId 與全文，绑定本次任務；完成及派送再次檢查來源有效性。記憶中的 sourceId 或僅存在的來源 ID 不能證明本次回答有依據。來源不足時拒答或追問。
 
-Google 官方 Search Grounding 使用獨立的本人 LIFF 結果頁，呈現答案、來源及 Search Suggestions；主 Agent 只收到完成狀態。Grounding 不送 crawler、共享 RAG 或主 Agent Memory，不能冒充核定 RAG 原文。搜尋預設保持停用，使用獨立的 Google Search 開關，啟用前需完成供應商與搜尋結果驗收。舊 Brave adapter 不作目前搜尋部署預設。
+Google 官方 Search Grounding 使用獨立的本人 LIFF 結果頁，呈現答案、來源及 Search Suggestions；主 Agent 只收到完成狀態。Grounding 不送 crawler、共享 RAG 或主 Agent Memory，不能冒充核定 RAG 原文。搜尋由 gateway 的 N8nGroundingProvider 以 webhook token 向同一 n8n origin 的 `/webhook/campus-google-search` POST `{query}`，不傳使用者權限或任意模型設定。`campusGoogleSearch` 採 header-auth webhook → 嚴格 query-only 驗證 → 原生 HTTP Request（固定 Google API URL、既有 model／prompt／google_search／tool／token 設定，使用 `googlePalmApi` credential）→ respond；錯誤分支固定安全回覆。gateway 仍保留 response schema／大小、來源及 render 安全驗證；搜尋委派不削弱本人 task／lease／capability／session 或 native observation 驗證。`GOOGLE_SEARCH_ENABLED=false`，啟用前需完成供應商與搜尋結果驗收。舊 Brave adapter 不作目前搜尋部署預設。
 
 所有工具文字均視為資料，不能擴大權限或改寫系統指令。官方 reader 與校方 client 檢查固定 host、DNS 及 redirect；Docker 可連外並不等於供應商域名 allowlist。
 
@@ -88,12 +88,18 @@ Agent 每次執行由 `$now.setZone('Asia/Taipei')` 注入日期、星期、時�
 
 ## 7. 部署與儲存
 
-根目錄 `docker-compose.yml` 是唯一 Compose 入口，`Dockerfile` 提供必要映像建置；不使用 infra 目錄或多層 overlay。固定 n8n 2.41.7；服務名稱、資料 volume 與 Compose project identity 保持既有環境相容，不因整理目錄重建或清空資料。
+根 `docker-compose.yml` 是唯一入口，project name 為 `nutc-agent`，恰有 `postgres`、`n8n`、`gateway`、`school-adapter`、`cloudflared` 五個服務。`Dockerfile` 只有 `postgres`／`build`／`live` 三個 targets；backend 共用 live image。gateway 與 school-adapter 的啟動鏈先執行既有 checksum migration，再 exec server，沒有獨立 migrate service。
 
-新空 n8n metadata database 在 server 啟動前，由 `n8n-init` 使用同版本官方 CLI 建立四組加密 credentials、匯入兩個正式流程並發布主流程；語料流程不自動執行。秘密只經環境變數與 stdin 傳入，不落匯入檔。首次 owner 仍由 editor 設定。初始化以 PostgreSQL advisory lock 與 `campus_bootstrap.state` 狀態保護；已有 metadata schema 或完整初始化標記時只讀略過，中斷留下 pending 並阻止自動重試，避免覆寫人工修改。既有環境不自動升級工作流或同步 `.env` 到 credentials。
+官方 n8n 2.41.7 只依賴 PostgreSQL healthy，自行初始化 metadata；沒有 n8n-init，也不自動 import／publish。首次先由 editor 建立 owner，再手動執行 `scripts/setup-n8n.sh`：Docker 內產生三組內部 credentials，經 stdin 使用官方 CLI 匯入 credentials 及三個 inactive workflows。任一目標 ID 已存在即拒絕；不使用舊 bootstrap state／pending，也不自動覆寫或復原。owner 選取 Google credential、發布 main／search，再手動 ingest。
 
-n8n metadata 與 Agent 使用不同 database／role。Agent DB 保存正式身分、inbox／task／outbox、LIFF／學校 session、Memory、來源版本、staging／chunks。SQL migration 屬應用 schema，不屬 mock；更新須核對 checksum，不接受未知既有 schema。已套用的歷史 migration checksum 不改寫；其中舊費用帳本 schema 僅為相容既有資料保留，現行服務不再讀寫。部署操作不得使用 `down -v` 或重置資料。
+根 `.env` 保留單一 `POSTGRES_PASSWORD`、64 hex `APP_MASTER_KEY`、`N8N_ENCRYPTION_KEY`、LINE／LIFF、公開 origin、Tunnel token 及搜尋開關；owner 維護設定為選用。三個 PostgreSQL role 共用密碼，n8n／Agent database 與 role 仍隔離；URL 由內部組合。master key 以 HKDF-SHA256 衍生用途隔離的 session、service、webhook、school-service、school-session、account-hash keys。Google key／模型僅由 n8n 管理。
 
-gateway 僅綁定 host loopback 3100，school-adapter 無 host port；n8n 管理入口僅 loopback。公開入口 `public-ingress` 與 `tunnel` 都由同一 Compose 啟動、健康檢查及自動重啟，不需主機 Node.js／pnpm／cloudflared 或額外程序。ingress 僅代理固定 gateway 與 LINE／LIFF 路徑；兩者沒有 host port，也不加入後端 management network。ingress 以獨立 internal network 連 gateway，不與 n8n／school-adapter／Postgres 共用網路。Tunnel ID 從根 `.env` 的 locally-managed `TUNNEL_CRED_CONTENTS` JSON 取得，hostname 從 `PUBLIC_ORIGIN` 取得；只產生不含秘密的暫存設定。Tunnel 等待 ingress 健康，並以 cloudflared `/ready` 檢查 Cloudflare 連線。新網域的 DNS／Tunnel 由管理者先設定，程式不修改 Cloudflare 帳戶。秘密集中根 `.env`，不進 build context、Git 或工作流 JSON。
+既有資料先備份，不清空 volumes、不直接換 key 或覆寫 `.env`；改 project name 不會搬移 volumes，改環境變數不會 ALTER 舊 role 密碼。保留 `N8N_ENCRYPTION_KEY`，舊加密資料需受控遷移。migration 016 在 transaction 核對 fingerprint：既有身分無 marker 報 `EXISTING_DATA_REQUIRES_KEY_MIGRATION`，換 key 報 `APP_MASTER_KEY_CHANGED` 並 rollback。兩個 server 也在 repository／OCR／worker／listen 前只讀核對 marker，不可刪 marker 繞過。
 
-目前是本機 Docker 加受限公開 ingress，不是遠端正式 Linux 部署。健康檢查、typecheck、靜態圖結構或合成測試都不能代替真人 LINE／LIFF、模型語意、搜尋整合、隔離、負載及備份還原驗收。
+Agent DB 保存身分、inbox／task／outbox、session、Memory、語料版本與 chunks。既有 SQL migration checksum 不改寫；歷史費用 schema 僅為資料相容保留，現行服務不讀寫。
+
+兩個網路為 `backend`／`public`：PostgreSQL、n8n、school-adapter 只加入 backend，gateway 加入兩者，cloudflared 只加入 public。gateway 同一 process 監聽 private 3100 與 public 3101，publicRouter 限制 host／path。n8n 15679、gateway 3100 僅綁 host loopback，public 3101 與 school-adapter 無 host port。
+
+官方 cloudflared 使用 `TUNNEL_TOKEN`，command 含 `--url http://gateway:3101` 與 `--metrics 0.0.0.0:20311`。沒有 remote ingress 時由固定 origin 提供入口；Dashboard 若設 remote ingress，也必須指向 `http://gateway:3101`，不可用 private 3100／localhost。hostname 對應 `PUBLIC_ORIGIN`；DNS／Tunnel 由管理者配置。`--wait` 只等待四個 healthchecks 與 cloudflared running，真 Cloudflare 連線須從 gateway 查 `http://cloudflared:20311/ready`。
+
+秘密留在 `.env`／n8n credentials，不進 Git、build context 或 workflow JSON。自動啟動容器不是 Bot 配置完成；目前本機部署與公網入口驗證不代替完整真人、模型語意、負載、備份還原及遠端驗收。
