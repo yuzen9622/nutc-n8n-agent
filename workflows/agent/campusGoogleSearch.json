@@ -1,0 +1,204 @@
+{
+  "id": "campusGoogleSearch",
+  "name": "Campus Google Search · 公開搜尋統整",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campus-google-search",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "campus-google-search",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "campus-live-webhook",
+          "name": "Campus live webhook"
+        }
+      }
+    },
+    {
+      "id": "valid",
+      "name": "嚴格 query 驗證",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ (() => { const b = $json.body; return !!b && typeof b === 'object' && !Array.isArray(b) && Object.keys(b).length === 1 && typeof b.query === 'string' && b.query.trim().length > 0 && b.query.length <= 500; })() }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "google",
+      "name": "Google Search Grounding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({systemInstruction:{parts:[{text:\"你是國立臺中科技大學的校園助理。使用 Google 搜尋查證公開資訊後，以繁體中文統整回答使用者；優先引用 nutc.edu.tw 官方資料，找不到官方依據就明說無法確認。不要猜測系所、承辦人或期限。不要要求或查詢個人帳密、學號、私人紀錄。\"}]},contents:[{role:\"user\",parts:[{text:$json.body.query}]}],tools:[{google_search:{ } }],generationConfig:{maxOutputTokens:2048,candidateCount:1} }) }}",
+        "options": {
+          "timeout": 25000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "onError": "continueErrorOutput",
+      "retryOnFail": false,
+      "notes": "Google API key 由 n8n 管理：匯入後請在 editor 選取同一組 Google Gemini(PaLM) API credential；此檔不含 Google credential 參照。",
+      "notesInFlow": true
+    },
+    {
+      "id": "reply",
+      "name": "回覆搜尋結果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "invalid",
+      "name": "非法 query",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        240
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\":\"INVALID_SEARCH_QUERY\"}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "unavailable",
+      "name": "搜尋暫時無法使用",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        -240
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"error\":\"GOOGLE_SEARCH_UNAVAILABLE\"}",
+        "options": {
+          "responseCode": 503
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "嚴格 query 驗證",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "嚴格 query 驗證": {
+      "main": [
+        [
+          {
+            "node": "Google Search Grounding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "非法 query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Search Grounding": {
+      "main": [
+        [
+          {
+            "node": "回覆搜尋結果",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "搜尋暫時無法使用",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 30,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {}
+}

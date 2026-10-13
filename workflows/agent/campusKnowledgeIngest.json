@@ -124,12 +124,8 @@
       "parameters": {
         "modelName": "models/gemini-embedding-001"
       },
-      "credentials": {
-        "googlePalmApi": {
-          "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini proxy"
-        }
-      }
+      "notes": "Google API key 由 n8n 管理：匯入後請在 editor 選取同一組 Google Gemini(PaLM) API credential；此檔不含 Google credential 參照。",
+      "notesInFlow": true
     },
     {
       "id": "loader",

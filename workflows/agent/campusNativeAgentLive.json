@@ -144,14 +144,8 @@
           "temperature": 0.2
         }
       },
-      "notes": "真實 Gemini 呼叫已通過原生節點驗證；使用內部模型 proxy，實際 key 只存在 .env。",
-      "notesInFlow": true,
-      "credentials": {
-        "googlePalmApi": {
-          "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini proxy"
-        }
-      }
+      "notes": "Google API key 由 n8n 管理：匯入後請在 editor 選取同一組 Google Gemini(PaLM) API credential；此檔不含 Google credential 參照。",
+      "notesInFlow": true
     },
     {
       "id": "validate",
@@ -287,13 +281,8 @@
       "parameters": {
         "modelName": "models/gemini-embedding-001"
       },
-      "notes": "固定 gemini-embedding-001／3072 維，匯入與查詢共用相同模型。",
-      "credentials": {
-        "googlePalmApi": {
-          "id": "campus-live-gemini-proxy",
-          "name": "Campus Gemini proxy"
-        }
-      }
+      "notes": "固定 gemini-embedding-001／3072 維，匯入與查詢共用相同模型。匯入後請在 editor 選取同一組 Google Gemini(PaLM) API credential。",
+      "notesInFlow": true
     },
     {
       "id": "direct-student_schedule",
@@ -493,9 +482,9 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({lease:$('整理訊息').first().json.lease,taskId:$('整理訊息').first().json.taskId,capability:$('整理訊息').first().json.capability,kind:'web',query:$fromAI('query', '要搜尋的公開校園問題，不含私人資料', 'string')}) }}",
         "options": {
-          "timeout": 10000
+          "timeout": 35000
         },
-        "toolDescription": "使用 Gemini 官方 Google Search 查詢並統整中科大公開時效資訊。僅傳公開 query。grounded_answer_ready 表示後端將提供完整答案、來源及搜尋建議，不需重新摘要或編造 sourceId。"
+        "toolDescription": "透過 n8n 管理的 Google Search（Gemini）查詢並統整中科大公開時效資訊。僅傳公開 query。grounded_answer_ready 表示後端將提供完整答案、來源及搜尋建議，不需重新摘要或編造 sourceId。"
       },
       "credentials": {
         "httpHeaderAuth": {

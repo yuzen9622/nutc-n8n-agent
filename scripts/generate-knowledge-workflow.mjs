@@ -10,7 +10,7 @@ const nodes=[
  node('loop','逐段建立向量',core+'splitInBatches',3,[480,0],{batchSize:1,options:{}}),
  node('changed','內容是否變更',core+'if',2.2,[720,200],{conditions:{options:{caseSensitive:true,leftValue:'',typeValidation:'strict',version:2},conditions:[{leftValue:'={{ $json.needsEmbedding }}',rightValue:true,operator:{type:'boolean',operation:'true',singleValue:true}}],combinator:'and'},options:{}}),
  node('insert','暫存 PGVector',ai+'vectorStorePGVector',1.3,[1000,200],{mode:'insert',tableName:'campus_knowledge_staging',options:{}},{credentials:{postgres:{id:'campus-agent-postgres',name:'Campus Agent Postgres'}},retryOnFail:false}),
- node('embedding','真實 Gemini Embeddings',ai+'embeddingsGoogleGemini',1,[960,460],{modelName:'models/gemini-embedding-001'},{credentials:{googlePalmApi:{id:'campus-live-gemini-proxy',name:'Campus Gemini proxy'}}}),
+ node('embedding','真實 Gemini Embeddings',ai+'embeddingsGoogleGemini',1,[960,460],{modelName:'models/gemini-embedding-001'},{notes:'Google API key 由 n8n 管理：匯入後請在 editor 選取同一組 Google Gemini(PaLM) API credential；此檔不含 Google credential 參照。',notesInFlow:true}),
  node('loader','官方段落與來源',ai+'documentDefaultDataLoader',1.1,[1200,460],{dataType:'json',jsonMode:'expressionData',jsonData:'={{ $json.text }}',textSplittingMode:'custom',options:{metadata:{metadataValues:metadata.map(name=>({name,value:`={{ $json.metadata.${name} }}`}))}}}),
  node('splitter','保留已切好的段落',ai+'textSplitterRecursiveCharacterTextSplitter',1,[1200,680],{chunkSize:8000,chunkOverlap:0,options:{}}),
  http('publish','驗證整批並原子發布',760,'publish',"={{ JSON.stringify({batchId:$('讀取核定官方文件').first().json.metadata.batchId}) }}"),
