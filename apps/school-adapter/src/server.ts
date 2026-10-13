@@ -1,6 +1,7 @@
 import {createServer} from 'node:http';
 import {Pool} from 'pg';
 import {loadSchoolConfig} from './config/env.js';
+import {assertRuntimeKey} from '../../shared/runtime-key-guard.mjs';
 import {SessionCrypto} from './modules/school/session.crypto.js';
 import {SchoolSessionRepository} from './modules/school/session.repository.js';
 import {SchoolLoginService} from './modules/school/login.service.js';
@@ -11,6 +12,7 @@ import {schoolRouter} from './modules/school/school.router.js';
 const config=loadSchoolConfig();
 const pool=new Pool({connectionString:config.SCHOOL_DATABASE_URL,max:5,connectionTimeoutMillis:3000,statement_timeout:5000});
 pool.on('error',()=>console.error('School database unavailable'));
+await assertRuntimeKey(pool,process.env.APP_MASTER_KEY).catch(async error=>{await pool.end();throw error;});
 const sessions=new SchoolSessionRepository(pool,new SessionCrypto(config.SCHOOL_SESSION_KEY,config.SCHOOL_ACCOUNT_HASH_KEY));
 const ocr=new LocalOcr(),service=new SchoolService(sessions,new SchoolLoginService((image,signal)=>ocr.recognize(image,signal)));
 const server=createServer(schoolRouter(new SchoolController(service),config.SCHOOL_SERVICE_TOKEN));

@@ -1,6 +1,6 @@
 import {load} from 'cheerio';
 import {Fault} from '../../utils/fault.js';
-import type {GroundedAnswer} from './google-grounding.provider.js';
+import type {GroundedAnswer} from './n8n-grounding.provider.js';
 const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 // Reject active markup instead of silently changing Google's required suggestions.
 export function renderGroundedAnswer(result:GroundedAnswer):string{

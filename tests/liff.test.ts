@@ -9,7 +9,7 @@ import { lineRouter } from '../apps/gateway/src/modules/line/line.router.js';
 test('LIFF endpoint preserves SDK callbacks and identity rejects cross-origin before verification',async()=>{
   const origin='https://campus.example'; let verified=0;
   const service=new LineService({accept:async()=>{},identity:async()=>({sessionKey:'test'})},{verifyIdentity:async()=>{verified++;return `U${'a'.repeat(32)}`;}});
-  const server=createServer(lineRouter(new LineController(service,'secret','destination',origin),undefined,undefined,new LiffController(origin,'2011885607-test')));
+  const server=createServer(lineRouter(new LineController(service,'secret','destination',origin),undefined,new LiffController(origin,'2011885607-test')));
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try{

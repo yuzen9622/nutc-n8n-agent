@@ -1,4 +1,4 @@
-import type {GoogleGroundingProvider} from '../search/google-grounding.provider.js';
+import type {N8nGroundingProvider} from '../search/n8n-grounding.provider.js';
 import type {SchoolProvider} from '../liff/school.provider.js';
 import type {PersonalAction} from '../personal/personal.schema.js';
 import {renderPersonal} from '../personal/personal.render.js';
@@ -12,7 +12,7 @@ import {knowledgeEvidence} from '../knowledge/knowledge.evidence.js';
 
 export class TaskService {
   constructor(private readonly repository:TaskRepository,private readonly identities:LineRepository,
-    private readonly search?:SearchProvider,private readonly school?:SchoolProvider,private readonly grounding?:GoogleGroundingProvider) {}
+    private readonly search?:SearchProvider,private readonly school?:SchoolProvider,private readonly grounding?:N8nGroundingProvider) {}
   prepare(auth:TaskAuth) {return this.repository.prepare(auth,(user,generation)=>this.identities.sessionKey(user,generation));}
   async tool(auth:TaskAuth,kind:'web'|'personal',query:string,params?:Record<string,unknown>) {
     let action:PersonalAction=query as PersonalAction;

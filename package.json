@@ -9,8 +9,6 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "generate": "node scripts/generate-live-agent-workflow.mjs && node scripts/generate-knowledge-workflow.mjs",
     "check": "pnpm typecheck && pnpm test && node scripts/check-artifacts.mjs",
-    "start:tunnel": "node scripts/start-tunnel.mjs",
-    "start:public": "node --env-file-if-exists=.env dist/apps/gateway/src/public-server.js",
     "start:gateway": "node --env-file-if-exists=.env dist/apps/gateway/src/server.js",
     "test:line:database": "pnpm build && node scripts/check-line-database.mjs",
     "start:school": "node --env-file-if-exists=.env dist/apps/school-adapter/src/server.js",

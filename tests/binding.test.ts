@@ -10,7 +10,7 @@ import {Fault} from '../apps/gateway/src/utils/fault.js';
 test('binding uses verified owner, requires origin and CSRF, and never returns school secrets',async()=>{
  const owner=`U${'a'.repeat(32)}`,token='t'.repeat(43),csrf='c'.repeat(43);let calls=0,live=true;
  const service=new BindingService({issue:async user=>{assert.equal(user,owner);return {token,csrf};},authorize:async(t,c)=>{if(!live||t!==token||c!==csrf)throw new Fault(401,'LIFF_SESSION_REQUIRED');return owner;}},{verifyIdentity:async()=>owner},{bind:async(user,account,password)=>{calls++;assert.equal(user,owner);assert.equal(account,'student');assert.equal(password,' pass ');}});
- const server=createServer(lineRouter({}as LineController,undefined,undefined,undefined,new BindingController(service,'https://campus.example')));
+ const server=createServer(lineRouter({}as LineController,undefined,undefined,new BindingController(service,'https://campus.example')));
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${(server.address()as AddressInfo).port}`;
  const send=(path:string,body:unknown,headers:Record<string,string>={})=>fetch(`${base}/liff/${path}`,{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://campus.example',...headers},body:JSON.stringify(body)});
  try{
@@ -34,7 +34,7 @@ test('grounded result endpoint requires browser session and only uses its verifi
  const sessions={authorize:async(t:string,c:string)=>{if(t!==token||c!==csrf)throw new Fault(401,'LIFF_SESSION_REQUIRED');return 'verified-owner';}};
  const tasks={groundedResult:async(user:string,id:string)=>{reads++;assert.equal(user,'verified-owner');assert.equal(id,taskId);return '<article>verified</article>';}};
  const controller=new BindingController({}as BindingService,'https://campus.example',sessions as import('../apps/gateway/src/modules/liff/binding.repository.js').BindingRepository,tasks as unknown as import('../apps/gateway/src/modules/tasks/task.repository.js').TaskRepository);
- const server=createServer(lineRouter({}as LineController,undefined,undefined,undefined,controller));
+ const server=createServer(lineRouter({}as LineController,undefined,undefined,controller));
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${(server.address()as AddressInfo).port}`;
  const headers={'Content-Type':'application/json',Origin:'https://campus.example',Cookie:`__Host-campus_liff=${token}`,'X-CSRF-Token':csrf};
  const send=(body:unknown,h=headers)=>fetch(base+'/liff/result',{method:'POST',headers:h,body:JSON.stringify(body)});
