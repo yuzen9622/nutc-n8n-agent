@@ -9,11 +9,12 @@
 | 靜態檢查／建置 | `pnpm check` 121 tests PASS；`pnpm build` PASS |
 | 根 Compose | 使用隔離 project `nutc-five-verify` 實跑五服務；兩個 backend 先 migration 再 exec server；PostgreSQL role 隔離已驗證 |
 | 公開入口 | 真 Tunnel `/ready` 200；公網 LIFF 200；LINE raw-body 簽名驗證通過；private 路徑即使帶 token 仍 404 |
-| n8n 首次設定 | 瀏覽器建立 owner、開啟主流程畫布；手動 setup 成功，三個 inactive workflows／三個 credentials 可見；Postgres credential 實測連線成功；再次 setup 拒絕且 metadata hash 不變 |
+| n8n 首次設定（歷史） | 當時以瀏覽器建立 owner、開啟主流程畫布；手動 setup 成功，三個 inactive workflows／三個 credentials 可見；Postgres credential 實測連線成功；再次 setup 拒絕且 metadata hash 不變 |
+| n8n owner 自動建立 | 隔離 project `nutc-owner-acceptance` 實跑 frozen runner（官方 n8n 2.41.7）：healthy 時 setup flag false、設定帳密登入 200、僅一位使用者、無自動匯入；換 env 重建後原登入 200、替換帳密 401、人數不變；logs 無密碼；缺密碼 config 失敗。未驗：瀏覽器外觀、email／reset／LDAP／SAML、遠端 Linux／Cloudflare、setup POST 中途 crash 復原 |
 | 停止／重啟 | 五服務正常退出（exit 0），重新啟動成功；三個 workflows／三個加密 credentials hash 完全相同，Tunnel ready 與外網 LIFF 仍回 200 |
 | 尚未驗證 | 本輪未重新驗收 Google／chat／RAG／ingest 或真人 LINE 對話 |
 
-Compose 不自動 import／publish，也沒有 n8n-init。首次 owner 建立後執行 `bash scripts/setup-n8n.sh`，再於 editor 配置 Google credential、發布 main／search、手動 ingest。容器健康與 Tunnel 連線不代表 Bot 已配置完成。
+Compose 不自動 import／publish，也沒有 n8n-init。owner 由 n8n 容器依 `.env` 自動建立（本輪新增，見下列驗收紀錄）；healthy 後執行 `bash scripts/setup-n8n.sh`，再於 editor 配置 Google credential、發布 main／search、手動 ingest。容器健康與 Tunnel 連線不代表 Bot 已配置完成。
 
 本輪未修改使用者既有 `.env`、既有 volumes 或遠端。cloudflared 固定 origin 為 `http://gateway:3101`；Dashboard 有 remote ingress 時也使用同一 origin，不指向 private 3100／localhost。
 

@@ -1,6 +1,6 @@
 # 校園 n8n AI Agent 系統設計
 
-更新：2026-10-13。部署操作見 [README](../README.md)，本輪部署驗收與歷史模型證據分列於 [Roadmap](ROADMAP.md)。目前採五服務 Compose、手動首次設定 n8n，未完成遠端正式部署或完整真人驗收。
+更新：2026-10-13。部署操作見 [README](../README.md)，本輪部署驗收與歷史模型證據分列於 [Roadmap](ROADMAP.md)。目前採五服務 Compose；n8n owner 由容器內 supervisor 以必填 env 自動建立，Bot 工作流（credentials／workflows／Google credential）仍須手動設定，未完成遠端正式部署或完整真人驗收。
 
 ## 1. 目的與範圍
 
@@ -90,15 +90,15 @@ Agent 每次執行由 `$now.setZone('Asia/Taipei')` 注入日期、星期、時�
 
 根 `docker-compose.yml` 是唯一入口，project name 為 `nutc-agent`，恰有 `postgres`、`n8n`、`gateway`、`school-adapter`、`cloudflared` 五個服務。`Dockerfile` 只有 `postgres`／`build`／`live` 三個 targets；backend 共用 live image。gateway 與 school-adapter 的啟動鏈先執行既有 checksum migration，再 exec server，沒有獨立 migrate service。
 
-官方 n8n 2.41.7 只依賴 PostgreSQL healthy，自行初始化 metadata；沒有 n8n-init，也不自動 import／publish。首次先由 editor 建立 owner，再手動執行 `scripts/setup-n8n.sh`：Docker 內產生三組內部 credentials，經 stdin 使用官方 CLI 匯入 credentials 及三個 inactive workflows。任一目標 ID 已存在即拒絕；不使用舊 bootstrap state／pending，也不自動覆寫或復原。owner 選取 Google credential、發布 main／search，再手動 ingest。
+官方 n8n 2.41.7（固定 digest）依賴 PostgreSQL healthy；沒有 n8n-init 或第六服務，也不自動 import／publish。n8n service 以 `tini -- node /opt/campus/start-n8n.mjs` 為 entrypoint：supervisor 以官方 `/docker-entrypoint.sh` 啟動 n8n（子程序不含 `N8N_OWNER_*`），等 readiness 後讀 `/rest/settings`；`showSetupOnFirstLoad` 為 false（已有 owner）即略過，不登入、不比對、不修改；為 true 才以必填 `N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` 對 loopback 官方 `/rest/owner/setup` 單次 POST（密碼只在 body，不進 argv／log），並回讀 flag 為 false 才寫非秘密 ready marker。healthcheck 需 marker、readiness 與 flag=false 同時成立，gateway 因此在 owner 完成後才啟動。首次 POST 前先在持久 `n8n_data` 以原子 `wx` 建立非秘密 attempt marker（`/home/node/.n8n/.campus-owner-setup-attempt`，不含 email／密碼／payload）；flag 回讀 false 後才清除，成功路徑不留 marker。若 flag 仍 true 而 marker 已存在（Compose `restart: unless-stopped` 重啟、POST 結果未知），固定輸出 `N8N_OWNER_SETUP_REVIEW_REQUIRED` 並停止，不再 POST；若重啟時 flag 已 false（POST 已生效但回應遺失）則清除 stale marker 視為 existing。POST 失敗（非 2xx／timeout／network）亦保留 marker。人工調查：先備份 `n8n_data` 與 PostgreSQL，確認 owner 實際狀態；確認 owner 確實未建立後，由管理者在授權環境手動移除該 marker 檔再受控重啟重試，本專案不提供自動刪 marker 的啟動流程。失敗只輸出固定錯誤碼並終止 n8n，不盲目重試、不修 DB；SIGTERM／SIGINT 轉送子程序群組，45 秒 grace；直接子程序退出後以 process-group 存活檢查確認整組消失才結束，群組殘留者在原 grace deadline 後 SIGKILL，自然退出亦會有界清理殘留群組。owner 建立後再手動執行 `scripts/setup-n8n.sh`：Docker 內產生三組內部 credentials，經 stdin 使用官方 CLI 匯入 credentials 及三個 inactive workflows。任一目標 ID 已存在即拒絕；不使用舊 bootstrap state／pending，也不自動覆寫或復原。owner 選取 Google credential、發布 main／search，再手動 ingest。
 
-根 `.env` 保留單一 `POSTGRES_PASSWORD`、64 hex `APP_MASTER_KEY`、`N8N_ENCRYPTION_KEY`、LINE／LIFF、公開 origin、Tunnel token 及搜尋開關；owner 維護設定為選用。三個 PostgreSQL role 共用密碼，n8n／Agent database 與 role 仍隔離；URL 由內部組合。master key 以 HKDF-SHA256 衍生用途隔離的 session、service、webhook、school-service、school-session、account-hash keys。Google key／模型僅由 n8n 管理。
+根 `.env` 保留單一 `POSTGRES_PASSWORD`、64 hex `APP_MASTER_KEY`、`N8N_ENCRYPTION_KEY`、LINE／LIFF、公開 origin、Tunnel token 及搜尋開關；`N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` 必填且只傳給 n8n 容器（既有 owner 不被其覆寫）；`N8N_BASE_URL` 僅供 host 維護工具。三個 PostgreSQL role 共用密碼，n8n／Agent database 與 role 仍隔離；URL 由內部組合。master key 以 HKDF-SHA256 衍生用途隔離的 session、service、webhook、school-service、school-session、account-hash keys。Google key／模型僅由 n8n 管理。
 
 既有資料先備份，不清空 volumes、不直接換 key 或覆寫 `.env`；改 project name 不會搬移 volumes，改環境變數不會 ALTER 舊 role 密碼。保留 `N8N_ENCRYPTION_KEY`，舊加密資料需受控遷移。migration 016 在 transaction 核對 fingerprint：既有身分無 marker 報 `EXISTING_DATA_REQUIRES_KEY_MIGRATION`，換 key 報 `APP_MASTER_KEY_CHANGED` 並 rollback。兩個 server 也在 repository／OCR／worker／listen 前只讀核對 marker，不可刪 marker 繞過。
 
 Agent DB 保存身分、inbox／task／outbox、session、Memory、語料版本與 chunks。既有 SQL migration checksum 不改寫；歷史費用 schema 僅為資料相容保留，現行服務不讀寫。
 
-兩個網路為 `backend`／`public`：PostgreSQL、n8n、school-adapter 只加入 backend，gateway 加入兩者，cloudflared 只加入 public。gateway 同一 process 監聽 private 3100 與 public 3101，publicRouter 限制 host／path。n8n 15679、gateway 3100 僅綁 host loopback，public 3101 與 school-adapter 無 host port。
+兩個網路為 `backend`／`public`：PostgreSQL、n8n、school-adapter 只加入 backend，gateway 加入兩者，cloudflared 只加入 public。gateway 同一 process 監聽 private 3100 與 public 3101，publicRouter 限制 host／path。n8n 15680、gateway 3100 僅綁 host loopback，public 3101 與 school-adapter 無 host port。
 
 官方 cloudflared 使用 `TUNNEL_TOKEN`，command 含 `--url http://gateway:3101` 與 `--metrics 0.0.0.0:20311`。沒有 remote ingress 時由固定 origin 提供入口；Dashboard 若設 remote ingress，也必須指向 `http://gateway:3101`，不可用 private 3100／localhost。hostname 對應 `PUBLIC_ORIGIN`；DNS／Tunnel 由管理者配置。`--wait` 只等待四個 healthchecks 與 cloudflared running，真 Cloudflare 連線須從 gateway 查 `http://cloudflared:20311/ready`。
 

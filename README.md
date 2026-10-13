@@ -11,7 +11,7 @@
 
 學生各自透過 LIFF 登入校務系統，不共用帳號。登入密碼不保存，Cookie 不送模型；經本人授權的校務結果會提供 Google Gemini 處理。
 
-[系統設計](docs/SDD.md) · [Roadmap 與驗收進度](docs/ROADMAP.md) · [本機 n8n 畫布](http://localhost:15679/workflow/campusNativeAgentLive) · [LIFF 入口](https://nutc-agent.yuzen.dev/liff/)
+[系統設計](docs/SDD.md) · [Roadmap 與驗收進度](docs/ROADMAP.md) · [本機 n8n 畫布](http://localhost:15680/workflow/campusNativeAgentLive) · [LIFF 入口](https://nutc-agent.yuzen.dev/liff/)
 
 ## 功能與現況
 
@@ -43,11 +43,12 @@ chmod 600 .env
 | `POSTGRES_PASSWORD` | 三個 PostgreSQL role 共用密碼，database／role 仍隔離 |
 | `APP_MASTER_KEY` | 64 hex，衍生內部驗證及校務加密金鑰 |
 | `N8N_ENCRYPTION_KEY` | n8n credentials 加密 |
+| `N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` | 必填。首次空 n8n metadata DB 時自動建立 owner；密碼須符合 n8n 2.41.7 預設（8–64 字元、至少一個數字與一個大寫字母，以 n8n API 為準） |
 | LINE／LIFF 欄位 | Channel IDs、secret、access token、destination、LIFF ID；替換範例值 |
 | `PUBLIC_ORIGIN`／`CLOUDFLARE_TUNNEL_TOKEN` | 公開 HTTPS origin／Dashboard connector token |
 | `GOOGLE_SEARCH_ENABLED` | 預設 false，完成搜尋驗收後才啟用 |
 
-Google key 與模型只在 n8n editor 設定，不放 `.env`。`N8N_BASE_URL`／owner 維護憑證為選用，不會自動建立 owner。模型費用由供應商計收，請自行管理帳務。
+Google key 與模型只在 n8n editor 設定，不放 `.env`。`N8N_BASE_URL` 僅供 host 維護工具，owner 自動建立固定在 n8n 容器內，不依賴它。模型費用由供應商計收，請自行管理帳務。
 
 **既有資料先備份：不可清空 volumes、直接換金鑰或覆寫 `.env`。project name 現為 `nutc-agent`，改名不會搬移舊 volumes；須核對並受控遷移。修改 `.env` 也不會自動更新既有 DB role 密碼；保留原 `N8N_ENCRYPTION_KEY`。**
 
@@ -58,7 +59,7 @@ docker compose up -d --build --wait --wait-timeout 600
 docker compose ps
 ```
 
-Compose 啟動 `postgres`、`n8n`、`gateway`、`school-adapter`、`cloudflared`。兩個 backend 先執行既有 checksum migration，再 exec server；沒有獨立 migrate service。官方 n8n 2.41.7 只等待 PostgreSQL healthy，自行初始化 metadata，**不自動匯入或發布工作流**。gateway 同時啟動 worker 與公開入口。
+Compose 啟動 `postgres`、`n8n`、`gateway`、`school-adapter`、`cloudflared`。兩個 backend 先執行既有 checksum migration，再 exec server；沒有獨立 migrate service。官方 n8n 2.41.7 等待 PostgreSQL healthy 後初始化 metadata；n8n 容器內的 supervisor 在首次空 DB 以 `N8N_OWNER_*` 自動建立 owner，**owner 完成後才 healthy**，**不自動匯入或發布工作流**。已有 owner 時直接略過，不登入、不比對、不覆寫，修改 `.env` 的 owner 值不會更新既有 owner（需用 n8n 自己的管理／恢復程序；本專案不提供 reset）。owner 設定失敗時 n8n 會停止並只輸出固定錯誤碼（不含密碼或回應內容）。首次 POST 前會在 `n8n_data` 建立非秘密 attempt marker（`.campus-owner-setup-attempt`）：若重啟後 owner 仍未建立（flag 仍 true）而 marker 存在，會以 `N8N_OWNER_SETUP_REVIEW_REQUIRED` 停止且不再送出 POST，避免 `restart: unless-stopped` 盲目重送；若 owner 已存在則自動清除 stale marker。看到此碼時請先備份 `n8n_data` 與 PostgreSQL、確認 owner 狀態，確認未建立後由管理者手動移除該 marker 再受控重啟；本專案不提供自動刪 marker 流程。gateway 同時啟動 worker 與公開入口。
 
 `--wait` 只確認四個服務的 healthcheck 及 cloudflared running；Tunnel 是否真正連線另查：
 
@@ -70,7 +71,7 @@ docker compose exec gateway node -e "fetch('http://cloudflared:20311/ready').the
 
 ### 3. 首次設定 n8n
 
-開啟 `http://localhost:15679` 建立 owner，再於 repo 根目錄執行：
+n8n healthy 後 owner 已建立，直接以 `.env` 的 `N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` 登入 `http://localhost:15680`（顯示名稱為 Campus Local，可於 editor 修改），**不需要再註冊**。接著在 repo 根目錄執行（這是 Bot 工作流設定的第二階段，仍須手動）：
 
 ```sh
 bash scripts/setup-n8n.sh
@@ -90,13 +91,13 @@ bash scripts/setup-n8n.sh
 | `campus-live-service` | `X-Campus-Service`，master key 衍生 token |
 | `campus-live-webhook` | `X-Campus-Webhook`，master key 衍生 token |
 
-owner 在 editor 建立 **Google Gemini (PaLM)** credential，使用官方 host `https://generativelanguage.googleapis.com`；選取 main 的 Chat Model／Embeddings、ingest 的 Embeddings、search 的 HTTP Request 節點。模型由 n8n 管理；embedding 保持 `models/gemini-embedding-001`／3072 維。
+owner 登入 editor 後建立 **Google Gemini (PaLM)** credential，使用官方 host `https://generativelanguage.googleapis.com`；選取 main 的 Chat Model／Embeddings、ingest 的 Embeddings、search 的 HTTP Request 節點。模型由 n8n 管理；embedding 保持 `models/gemini-embedding-001`／3072 維。
 
 保存並發布 main／search，再手動執行 ingest。確認語料、搜尋與實際回答後才接正式流量。三個流程分別處理對話、語料、搜尋，不是三個 Bot。
 
 **任一目標 workflow／credential ID 已存在，setup 即拒絕，不覆寫、不使用 bootstrap state／pending。** 重跑或匯入中斷時先備份並核對現有內容，再由管理者手動處理；不要清庫重試。`git pull` 不會更新 n8n 中的流程。
 
-遠端 editor 請透過 `ssh -N -L 15679:127.0.0.1:15679 使用者@主機` 存取，不公開管理埠。
+遠端 editor 請透過 `ssh -N -L 15680:127.0.0.1:15680 使用者@主機` 存取，不公開管理埠。
 
 ### 4. 設定公開網址
 
@@ -108,7 +109,7 @@ Compose 的官方 cloudflared 使用 `TUNNEL_TOKEN`，command 固定 `--url http
 
 LINE webhook 設 `${PUBLIC_ORIGIN}/line/webhook`，LIFF endpoint 設 `${PUBLIC_ORIGIN}/liff/`。Login Channel 須 Published，LIFF 須屬於該 Channel；將 `${PUBLIC_ORIGIN}` 換成實際 HTTPS origin。
 
-兩個網路為 `backend`／`public`，cloudflared 只加入 public。n8n `15679`、gateway private `3100` 僅綁 loopback；public `3101` 無 host port，publicRouter 限制 host／path，不暴露 internal API。Tunnel／DNS 由管理者配置，不需另開 host 程序。
+兩個網路為 `backend`／`public`，cloudflared 只加入 public。n8n `15680`、gateway private `3100` 僅綁 loopback；public `3101` 無 host port，publicRouter 限制 host／path，不暴露 internal API。Tunnel／DNS 由管理者配置，不需另開 host 程序。
 
 ## 開發與檢查
 
