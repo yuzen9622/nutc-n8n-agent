@@ -51,8 +51,25 @@ test('Compose has exactly the five requested services and two networks',()=>{
  const n8n=section('n8n');
  assert(n8n.includes('postgres: {condition: service_healthy}'));
  for(const old of ['n8n-init','migrate:','public-ingress','bootstrap-n8n'])assert(!n8n.includes(old));
- assert(n8n.includes('/healthz/readiness'));assert(n8n.includes('N8N_CONCURRENCY_PRODUCTION_LIMIT: 10'));
- assert(!n8n.includes('command:'));assert(!n8n.includes('entrypoint:'));
+ assert(n8n.includes('N8N_CONCURRENCY_PRODUCTION_LIMIT: 10'));
+});
+
+test('n8n keeps the pinned official image and bootstraps the owner inside the same container',()=>{
+ const n8n=section('n8n').replace(/\\\n\s*/g,'');
+ assert(n8n.includes('image: "docker.n8n.io/n8nio/n8n:2.41.7@sha256:bcef56dd44014e09774219536a3f8cb07f1b553fcba94044bd9fc0f21f8676a3"'));
+ assert(!n8n.includes('build:'));assert(!n8n.includes('command:'));
+ assert(n8n.includes('entrypoint: [tini, --, node, /opt/campus/start-n8n.mjs]'));
+ assert(n8n.includes('stop_grace_period: 45s'));
+ assert(n8n.includes('N8N_OWNER_EMAIL: ${N8N_OWNER_EMAIL:?Required}'));
+ assert(n8n.includes('N8N_OWNER_PASSWORD: ${N8N_OWNER_PASSWORD:?Required}'));
+ for(const mount of ['setup-n8n','n8n-owner-bootstrap','start-n8n'])assert(n8n.includes(`- ./scripts/${mount}.mjs:/opt/campus/${mount}.mjs:ro`));
+ assert(n8n.includes('- ./workflows:/import:ro'));
+ assert.match(n8n,/healthcheck:\s+test:\s+- CMD\s+- node\s+- \/opt\/campus\/n8n-owner-bootstrap\.mjs\s+- --healthcheck/);
+ const wiring=n8n.split('environment:')[0]!+n8n.split('ports:')[1]!;
+ assert(!wiring.includes('N8N_OWNER')&&!wiring.includes('PASSWORD'));
+ for(const name of ['postgres','school-adapter','gateway','cloudflared'])assert(!section(name).includes('N8N_OWNER'));
+ assert(compose.match(/N8N_OWNER_PASSWORD/g)!.length===2);
+ assert(!compose.includes('n8n-init'));
 });
 
 test('both backend startup chains migrate before exec and the DB healthcheck uses postgres',()=>{
