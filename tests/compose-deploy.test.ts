@@ -4,10 +4,8 @@ import {createServer,request} from 'node:http';
 import type {AddressInfo} from 'node:net';
 import {readFileSync} from 'node:fs';
 import {publicRouter} from '../apps/gateway/src/modules/ingress/public.router.js';
-import {tunnelConfig} from '../scripts/start-tunnel.mjs';
 
-const credentials={TunnelID:'11111111-2222-3333-4444-555555555555',TunnelSecret:'private-secret',AccountTag:'account'};
-const env={PUBLIC_ORIGIN:'https://campus.example',TUNNEL_CRED_CONTENTS:JSON.stringify(credentials),TUNNEL_INGRESS_ORIGIN:'http://public-ingress:3101'};
+const env={PUBLIC_ORIGIN:'https://campus.example'};
 
 test('Docker ingress uses a fixed gateway, preserves LIFF cookies and denies private routes',async()=>{
  let called=0;
@@ -42,37 +40,44 @@ test('ingress deployment cannot select arbitrary upstreams or expose raw URL err
  assert.throws(()=>publicRouter('secret-not-a-url'),{message:'INVALID_PUBLIC_ORIGIN'});
 });
 
-test('Tunnel uses configured hostname and ID, fixed ingress paths and no secrets in YAML',()=>{
- const config=tunnelConfig(env);
- assert.equal(config.id,credentials.TunnelID);
- assert(config.yaml.includes('hostname: "campus.example"'));assert(config.yaml.includes('service: http://public-ingress:3101'));
- assert(config.yaml.includes('path: ^/(liff(/.*)?|line/webhook)$'));assert(config.yaml.endsWith('  - service: http_status:404\n'));
- assert(!config.yaml.includes(credentials.TunnelSecret));assert(!config.yaml.includes(credentials.AccountTag));
- assert(tunnelConfig({...env,TUNNEL_INGRESS_ORIGIN:undefined}).yaml.includes('service: http://127.0.0.1:3101'));
+const compose=readFileSync('docker-compose.yml','utf8');
+const dockerfile=readFileSync('Dockerfile','utf8');
+const services=compose.split('\nservices:\n')[1]!.split('\nnetworks:\n')[0]!;
+const section=(name:string)=>services.split(`  ${name}:\n`)[1]!.split(/\n  [a-z][a-z0-9-]*:\n/)[0]!;
+
+test('Compose has exactly the five requested services and two networks',()=>{
+ assert.deepEqual([...services.matchAll(/^  ([a-z][a-z0-9-]*):$/gm)].map(m=>m[1]).sort(),['cloudflared','gateway','n8n','postgres','school-adapter']);
+ assert.equal([...compose.split('\nnetworks:\n')[1]!.split('\nvolumes:\n')[0]!.matchAll(/^  \w+:$/gm)].length,2);
+ const n8n=section('n8n');
+ assert(n8n.includes('postgres: {condition: service_healthy}'));
+ for(const old of ['n8n-init','migrate:','public-ingress','bootstrap-n8n'])assert(!n8n.includes(old));
+ assert(n8n.includes('/healthz/readiness'));assert(n8n.includes('N8N_CONCURRENCY_PRODUCTION_LIMIT: 10'));
+ assert(!n8n.includes('command:'));assert(!n8n.includes('entrypoint:'));
 });
 
-test('invalid Tunnel config fails safely before any credential or upstream is used',()=>{
- for(const value of ['', 'private-secret', 'null', '[]', '{}', JSON.stringify({...credentials,TunnelID:'id\nservice: http://gateway:3100'}), JSON.stringify({...credentials,TunnelSecret:42}),JSON.stringify({...credentials,AccountTag:''})]){
-  assert.throws(()=>tunnelConfig({...env,TUNNEL_CRED_CONTENTS:value}),{message:'INVALID_TUNNEL_CONFIG'});
- }
- for(const origin of ['', 'private-secret','http://campus.example','https://campus.example/','https://user:private-secret@campus.example','https://campus.example/path','https://campus.example?x=1']){
-  assert.throws(()=>tunnelConfig({...env,PUBLIC_ORIGIN:origin}),{message:'INVALID_TUNNEL_CONFIG'});
- }
- for(const upstream of ['http://gateway:3100','http://n8n:5678','https://attacker.example','http://public-ingress:3101\nsecret']){
-  assert.throws(()=>tunnelConfig({...env,TUNNEL_INGRESS_ORIGIN:upstream}),{message:'INVALID_TUNNEL_INGRESS_ORIGIN'});
- }
+test('both backend startup chains migrate before exec and the DB healthcheck uses postgres',()=>{
+ assert.match(dockerfile,/CMD \["sh", "-c", "node scripts\/migrate-live-database\.mjs --container && exec node dist\/apps\/gateway\/src\/server\.js"\]/);
+ assert.match(section('school-adapter'),/node scripts\/migrate-live-database\.mjs --container &&\s+exec node dist\/apps\/school-adapter\/src\/server\.js/);
+ assert(section('school-adapter').includes('postgres: {condition: service_healthy}'));
+ assert(section('postgres').includes('-U postgres -d postgres'));
+ assert(!dockerfile.includes(' AS n8n-init'));assert(!dockerfile.includes(' AS tunnel'));
 });
 
-test('Compose packages ingress and tunnel without host installs, ports or secrets in build',()=>{
- const compose=readFileSync('docker-compose.yml','utf8'),dockerfile=readFileSync('Dockerfile','utf8');
- const ingress=compose.split('  public-ingress:\n')[1]!.split('  tunnel:\n')[0]!;
- const tunnel=compose.split('  tunnel:\n')[1]!.split('\nnetworks:\n')[0]!;
- assert(ingress.includes('PUBLIC_GATEWAY_ORIGIN: http://gateway:3100'));assert(ingress.includes('PUBLIC_HOST: 0.0.0.0'));
- assert(ingress.includes('gateway: {condition: service_healthy}'));assert(!ingress.includes('ports:'));
- assert(ingress.includes('networks: [public, ingress-gateway]'));assert(!ingress.includes('management'));
- assert(tunnel.includes('public-ingress: {condition: service_healthy}'));assert(tunnel.includes('networks: [public, egress]'));
- assert(tunnel.includes('TUNNEL_CRED_CONTENTS: ${TUNNEL_CRED_CONTENTS:?'));assert(!tunnel.includes('ports:'));assert(!tunnel.includes('management'));
- assert(tunnel.includes("fetch('http://127.0.0.1:20311/ready')"));assert(dockerfile.includes('FROM live AS tunnel'));
- assert.match(dockerfile,/FROM cloudflare\/cloudflared:2026\.6\.1@sha256:[a-f0-9]{64} AS cloudflared/);
- assert(!dockerfile.includes('COPY .env'));
+test('official cloudflared receives only its token, uses gateway public port and has no custom build',()=>{
+ const tunnel=section('cloudflared').replace(/\\\n\s*/g,'');
+ assert.match(tunnel,/image: "cloudflare\/cloudflared:2026\.6\.1@sha256:[a-f0-9]{64}"/);
+ assert.match(tunnel,/tunnel --no-autoupdate --url http:\/\/gateway:3101\s+--metrics 0\.0\.0\.0:20311 run/);
+ assert(tunnel.includes('TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Required}'));
+ assert(tunnel.includes('gateway: {condition: service_healthy}'));assert(tunnel.includes('networks: [public]'));
+ for(const forbidden of ['build:','ports:','APP_MASTER_KEY','POSTGRES_PASSWORD','node','--token '])assert(!tunnel.includes(forbidden));
+ assert(!dockerfile.includes('cloudflared'));assert(!dockerfile.includes('COPY .env'));
+});
+
+test('gateway health covers both listeners and credentials retain a single source',()=>{
+ const gateway=section('gateway');
+ assert(gateway.includes('127.0.0.1:3100/health/live'));assert(gateway.includes('127.0.0.1:3101/liff/'));
+ assert(gateway.includes('networks: [backend, public]'));
+ assert(gateway.includes('N8N_WEBHOOK_URL: http://n8n:5678/webhook/campus-agent-live'));
+ for(const obsolete of ['TUNNEL_CRED_CONTENTS','GEMINI_','${AGENT_DB_PASSWORD','${DB_POSTGRESDB_PASSWORD','${SERVICE_TOKEN','${SCHOOL_SESSION_KEY'])assert(!compose.includes(obsolete));
+ assert(compose.includes('APP_MASTER_KEY: ${APP_MASTER_KEY:?Required}'));
 });

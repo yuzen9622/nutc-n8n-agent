@@ -9,7 +9,7 @@ const loadRepository=path=>readFileSync(path,'utf8').replace("'../../utils/fault
 const repository=loadRepository('dist/apps/gateway/src/modules/line/line.repository.js');
 const taskRepository=loadRepository('dist/apps/gateway/src/modules/tasks/task.repository.js');
 const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(name=>readFileSync(`apps/gateway/migrations/${name}`,'utf8')).join('\n');
-const password=requiredEnv('AGENT_DB_PASSWORD');
+const password=requiredEnv('POSTGRES_PASSWORD');
 const script=`
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';

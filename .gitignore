@@ -8,3 +8,5 @@ tmp/pdfs/
 
 .env.*
 !.env.example
+
+.pi/

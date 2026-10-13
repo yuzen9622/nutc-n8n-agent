@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
 const {SessionCrypto}=await import(${JSON.stringify(moduleUrl('session.crypto.js'))});
 const {SchoolSessionRepository}=await import(${JSON.stringify(moduleUrl('session.repository.js'))});
-const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:${JSON.stringify(requiredEnv('AGENT_DB_PASSWORD'))},max:5,options:'-c search_path=${schema}'});
+const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:${JSON.stringify(requiredEnv('POSTGRES_PASSWORD'))},max:5,options:'-c search_path=${schema}'});
 const {BindingRepository}=await import(${JSON.stringify(bindingUrl)});
 const {LineRepository}=await import(${JSON.stringify(lineRepositoryUrl)});
 const {LineService}=await import(${JSON.stringify(lineServiceUrl)});
