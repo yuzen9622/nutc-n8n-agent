@@ -21,6 +21,7 @@
 | LINE 對話 | 一對一事件驗簽、自動註冊本人身分、持久任務與非同步回覆，不需要受邀名單                          |
 | 本人校務查詢  | 透過 LIFF 綁定本人校務 session；課表、缺曠與公告已驗證真實整合                       |
 | 公開資訊問答  | 官方 HTML／PDF 語料匯入，使用 Gemini Embeddings 與 PGVector 檢索，核對回答來源   |
+| 請假預覽／確認 | 先查當天實際可請假課程，顯示「尚未送出」摘要；另一則精確「確認送出」才消耗預覽。新版本尚待受控部署及真 Agent／校方驗收 |
 | 多輪記憶    | 使用 Postgres Chat Memory，按使用者與身分 generation 隔離，最多保留七天         |
 | 登入與撤銷   | 本地 OCR 處理驗證碼、加密保存校務 Cookie；解除綁定或 unfollow 時撤銷 session 與未交付任務 |
 
@@ -46,7 +47,6 @@ chmod 600 .env
 | `N8N_OWNER_EMAIL`／`N8N_OWNER_PASSWORD` | 必填。首次空 n8n metadata DB 時自動建立 owner；密碼須符合 n8n 2.41.7 預設（8–64 字元、至少一個數字與一個大寫字母，以 n8n API 為準） |
 | LINE／LIFF 欄位 | Channel IDs、secret、access token、destination、LIFF ID；替換範例值 |
 | `PUBLIC_ORIGIN`／`CLOUDFLARE_TUNNEL_TOKEN` | 公開 HTTPS origin／Dashboard connector token |
-| `GOOGLE_SEARCH_ENABLED` | 預設 false，完成搜尋驗收後才啟用 |
 
 Google key 與模型只在 n8n editor 設定，不放 `.env`。`N8N_BASE_URL` 僅供 host 維護工具，owner 自動建立固定在 n8n 容器內，不依賴它。模型費用由供應商計收，請自行管理帳務。
 
@@ -77,13 +77,12 @@ n8n healthy 後 owner 已建立，直接以 `.env` 的 `N8N_OWNER_EMAIL`／`N8N_
 bash scripts/setup-n8n.sh
 ```
 
-腳本只使用 Docker：產生三組內部 credentials，經 stdin 交給同版本 [官方 CLI](https://docs.n8n.io/hosting/scaling/cli/)，匯入三個**未啟用**工作流，不發布、不執行 ingest。
+腳本只使用 Docker：產生三組內部 credentials，經 stdin 交給同版本 [官方 CLI](https://docs.n8n.io/hosting/scaling/cli/)，匯入兩個**未啟用**工作流，不發布、不執行 ingest。
 
 | 工作流 | 用途 |
 |---|---|
 | [`campusNativeAgentLive`](workflows/agent/campusNativeAgentLive.json) | LINE Agent、記憶、RAG 與校務工具 |
 | [`campusKnowledgeIngest`](workflows/agent/campusKnowledgeIngest.json) | 手動匯入官方語料 |
-| [`campusGoogleSearch`](workflows/agent/campusGoogleSearch.json) | 獨立 Google Search Grounding |
 
 | credential ID | 自動匯入設定 |
 |---|---|
@@ -91,9 +90,9 @@ bash scripts/setup-n8n.sh
 | `campus-live-service` | `X-Campus-Service`，master key 衍生 token |
 | `campus-live-webhook` | `X-Campus-Webhook`，master key 衍生 token |
 
-owner 登入 editor 後建立 **Google Gemini (PaLM)** credential，使用官方 host `https://generativelanguage.googleapis.com`；選取 main 的 Chat Model／Embeddings、ingest 的 Embeddings、search 的 HTTP Request 節點。模型由 n8n 管理；embedding 保持 `models/gemini-embedding-001`／3072 維。
+owner 登入 editor 後建立 **Google Gemini (PaLM)** credential，使用官方 host `https://generativelanguage.googleapis.com`；選取 main 的 Chat Model／Embeddings／`official_search` HTTP Tool 節點與 ingest 的 Embeddings。`official_search` 由主 Agent 直接呼叫 Google 搜尋，只傳 AI 產生的公開 query；摘要與來源網址直接經正常 LINE 回覆送出，來源是外部網頁，不是學校核定 RAG，也不進共享 evidence。模型由 n8n 管理；embedding 保持 `models/gemini-embedding-001`／3072 維。
 
-保存並發布 main／search，再手動執行 ingest。確認語料、搜尋與實際回答後才接正式流量。三個流程分別處理對話、語料、搜尋，不是三個 Bot。
+保存並發布 main，再手動執行 ingest。確認語料、搜尋與實際回答後才接正式流量。兩個流程分別處理對話（含直接 Google 搜尋工具）與語料。
 
 **任一目標 workflow／credential ID 已存在，setup 即拒絕，不覆寫、不使用 bootstrap state／pending。** 重跑或匯入中斷時先備份並核對現有內容，再由管理者手動處理；不要清庫重試。`git pull` 不會更新 n8n 中的流程。
 
@@ -117,7 +116,7 @@ LINE webhook 設 `${PUBLIC_ORIGIN}/line/webhook`，LIFF endpoint 設 `${PUBLIC_O
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm generate       # 僅生成正式 Agent／搜尋／語料工作流，不匯入或發布
+pnpm generate       # 僅生成正式 Agent／語料工作流，不匯入或發布
 pnpm check
 pnpm build
 pnpm db:migrate:live # 已運行的已知本機 DB；核對 checksum，不清空資料
@@ -127,19 +126,46 @@ pnpm test:school:database
 
 `pnpm check` 包含 TypeScript 型別檢查、回歸測試及工作流 artifact 檢查；資料庫整合檢查需使用已知本機環境。工作流修改後，須在固定 n8n 2.41.7 runtime 實跑並確認 editor，靜態檢查不能代替畫布驗收。
 
-正式工作流的來源是 `scripts/generate-live-agent-workflow.mjs`（main／search）與 `scripts/generate-knowledge-workflow.mjs`（ingest）。修改 generator 後，需一併交付生成的 JSON；生成本身不會匯入或發布，也不能覆寫未知 n8n instance 的工作流。
+正式工作流的來源是 `scripts/generate-live-agent-workflow.mjs`（main）與 `scripts/generate-knowledge-workflow.mjs`（ingest）。修改 generator 後，需一併交付生成的 JSON；生成本身不會匯入或發布，也不能覆寫未知 n8n instance 的工作流。
 
 保留正式回歸測試及必要診斷腳本；臨時驗證輸出寫入忽略的 `.local/verification/`，不納入 docs。
+
+## 請假流程與既有安裝更新
+
+請假已拆成 `student_leave_preview`、`student_leave_confirm`、`student_leave_notes`。預覽只接受日期、完整假別名稱、事由及節次意圖（早上節數／range／periods）；課程 ID 與假別代碼由本人校務 session 即時查得。心理假正規化為心理調適假，代碼從表單取得，不硬編碼。日期、節次及未知欄位不會被 clamp、預設或忽略。
+
+預覽有效五分鐘，必須完整呈現固定摘要後，使用者在**另一則訊息**只回覆「確認送出」。同 turn、預先排隊、非精確 prompt、session／generation 改變均不能送出。確認工具無可替換 payload 的參數。舊 `leave_apply` 已停用且零校方 I/O。成功同時要求具體 `opDone(...)` 完成語義，以及完整 before／after 記錄集合中唯一新增的 matching record 明細；HTTP 200、redirect 或模型宣稱不是證明。
+
+每份預覽最多一次 create 嘗試：持久 attempt marker **先 commit**，再呼叫校方。結果未知、timeout 或 crash 後不重送，也不能換 task／新預覽繞過 unresolved marker；僅能至後台查看或唯讀 reconcile。這不是分散式 exactly-once，marker 後／POST 前 crash 可能實際零次。附件、多日、無法驗明的記錄明細或不完整分頁均 fail closed；不以猜測補資料。
+
+既有安裝必須先備份並 drain 舊 backend，再套用新增的 017 migration／更新 gateway 與 school-adapter，最後更新 main。不可回滾成舊一步 apply 工具與舊 backend 的可執行組合；保留 attempt marker，不清庫、不自動刪校方假單。首次 setup 的拒覆寫保護維持不變。
+
+下列是**後續維護指令，本輪未執行部署／發布或真 POST**：
+
+```sh
+# 新程式的隔離 DB 自驗：只建 random-owned schema，假校方 transport，零 LINE
+node scripts/check-leave-database.mjs --project nutc-agent
+# backend 完成受控更新後，已知本機 main 的 owned leave 片段更新
+node scripts/update-local-leave-workflow.mjs --project nutc-agent --dry-run
+node scripts/update-local-leave-workflow.mjs --project nutc-agent --apply
+node scripts/update-local-leave-workflow.mjs --project nutc-agent --verify
+```
+
+Updater 只接受本 repo 的 `nutc-agent` labels、固定 n8n 2.41.7 digest 與 loopback 15680；已有 owner 登入，不 setup/reset。dry-run 保存 0600 snapshot；apply 核對 published/editable version、hash、checksum、editor write lock，僅替換 leave nodes／connections／Agent 請假段落，其他節點與 credentials refs 不變。漂移或部分失敗即停，可能保持 inactive，不自動復原／重試；先檢查受限 snapshot 與 progress。
+
+部署及 active workflow 通過獨立核對後，才可由已授權管理者執行 `scripts/check-leave-live.mjs --project nutc-agent --preview`，依同一 run-id 做 `--confirm-authorized --run <id>`、`--replay --run <id>` 或唯讀 `--reconcile --run <id>`。runner 原子建立 capture task，不送 LINE webhook；worker 不 loading，兩層 outbox filter 不 push。stdout 僅報匹配布林、run-bound HMAC、count 與 capture delivery 證據，不 dump 本人摘要。manifest 0600、簽章與 enqueue reservation 阻止中斷後重建確認；stale `operation.lock` 必須先核對，不能盲目刪除重跑。
+
+此 runner 硬限凍結案例的真日期 2026-10-13／請假日 2026/10/14、唯一本人 session、心理 code 17、實際第 2/3/4 節與指定事由。日期不符就停止，不改時鐘、換日期或另送一張湊驗收。新程式的 unit／隔離 DB 自驗不是真 Agent、active workflow、校方新增紀錄或手機 LINE 驗收。
 
 ## 專案結構
 
 ```text
 apps/
-  gateway/          LINE、LIFF、任務、工具權限、搜尋委派與派送
+  gateway/          LINE、LIFF、任務、工具權限與派送
     migrations/    正式 Agent DB SQL migration
   school-adapter/  校務登入、本地 OCR 與本人 session 查詢
 scripts/           工作流生成、資料庫 migration 與整合診斷
-workflows/agent/   三個正式 n8n 工作流 JSON
+workflows/agent/   兩個正式 n8n 工作流 JSON
 tests/            正式回歸測試
 docs/
   SDD.md           系統設計
@@ -171,7 +197,7 @@ backend 啟動 migration 與 server 都核對 master key fingerprint；缺 marke
 | `EXISTING_DATA_REQUIRES_KEY_MIGRATION`／`APP_MASTER_KEY_CHANGED` | 主密鑰保護強制停止並 rollback；先核對原金鑰與受控遷移方案，不可刪除 fingerprint marker 繞過 |
 | LINE 沒有 Agent 回覆 | 工作流是否發布、credential 與 n8n 派送 URL 是否正確，以及服務是否 healthy            |
 | LIFF 無法登入或綁定     | HTTPS origin、LIFF／Login Channel 是否一致、Published 狀態與校務 session 是否有效     |
-| 搜尋沒有結果           | Google Search 預設停用；啟用後需確認供應商支援與真實搜尋結果，費用由供應商計收                            |
+| 搜尋沒有結果           | 確認 `official_search` 節點已選取 Google credential，且供應商支援 Google Search；費用由供應商計收                            |
 | Tunnel 連線失敗／503 | 檢查 `docker compose logs cloudflared`、token、`/ready` 與 Dashboard；origin 必須為 `http://gateway:3101` |
 
 `restart: unless-stopped` 處理退出／Docker 重啟，不會因 unhealthy 而重啟。cloudflared 會自行重連；持續斷線先查日誌，再視需要 `docker compose restart cloudflared`。一般環境變數更新須重建容器，不是只 restart；密碼、金鑰及 volume 變更須先遷移。
