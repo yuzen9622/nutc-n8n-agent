@@ -16,7 +16,7 @@ export function publicRouter(origin:string,liffId?:string,request:typeof fetch=f
       if(req.headers.host!==host)return json(res,421,{error:'HOST_DENIED'});
       const path=req.url?.split('?')[0];
       if(req.method==='GET' && path && ['/liff','/liff/','/liff/app.js','/liff/config'].includes(path))return liff.handle(path,res);
-      if(req.method!=='POST' || !['/line/webhook','/liff/identity','/liff/bind','/liff/result'].includes(req.url??''))return json(res,404,{error:'NOT_FOUND'});
+      if(req.method!=='POST' || !['/line/webhook','/liff/identity','/liff/bind'].includes(req.url??''))return json(res,404,{error:'NOT_FOUND'});
       const body=await readRaw(req),headers=new Headers();
       for(const name of ['content-type','x-line-signature','origin','cookie','x-csrf-token']){
         const value=req.headers[name];if(typeof value==='string')headers.set(name,value);

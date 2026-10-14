@@ -12,7 +12,7 @@ export function lineRouter(controller: LineController,tasks?:TaskController,liff
   return async (req: IncomingMessage,res: ServerResponse) => {
     try {
       const pagePath=req.url?.split('?')[0];
-      if(req.method==='POST' && binding && (req.url==='/liff/identity'||req.url==='/liff/bind'||req.url==='/liff/result')) return await binding.handle(req.url==='/liff/identity'?'identity':req.url==='/liff/result'?'result':'bind',req,res);
+      if(req.method==='POST' && binding && (req.url==='/liff/identity'||req.url==='/liff/bind')) return await binding.handle(req.url==='/liff/identity'?'identity':'bind',req,res);
       if(req.method==='GET' && liff && pagePath && ['/liff','/liff/','/liff/config','/liff/app.js'].includes(pagePath)) return liff.handle(pagePath,res);
       const taskPath=req.url?.match(/^\/internal\/v1\/agent\/(prepare|tool|complete)$/)?.[1];
       const knowledgePath=req.url?.match(/^\/internal\/v1\/knowledge\/(prepare|publish)$/)?.[1];

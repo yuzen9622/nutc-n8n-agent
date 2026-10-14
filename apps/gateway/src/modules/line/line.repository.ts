@@ -1,6 +1,7 @@
 import { randomUUID, createHmac } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Fault } from '../../utils/fault.js';
+import { bindLeaveConfirmation } from '../tasks/task.repository.js';
 
 export class LineRepository {
   constructor(private readonly pool: Pool, private readonly sessionSecret: string,private readonly liffId?:string) {}
@@ -53,8 +54,10 @@ export class LineRepository {
         await client.query("UPDATE campus_outbox SET state='cancelled',reply='' WHERE user_id=$1 AND state IN ('pending','sending')", [userId]);
         return;
       }
-      await client.query('INSERT INTO campus_tasks(id,event_id,user_id,generation,prompt) VALUES($1,$2,$3,$4,$5)',
-        [randomUUID(),eventId,userId,generation,prompt]);
+      const taskId=randomUUID();
+      await client.query('INSERT INTO campus_tasks(id,event_id,user_id,generation,prompt,created_at) VALUES($1,$2,$3,$4,$5,clock_timestamp())',
+        [taskId,eventId,userId,generation,prompt]);
+      await bindLeaveConfirmation(client,userId,generation,taskId,prompt);
     });
   }
 }

@@ -29,7 +29,7 @@ test('master key configuration rejects partial, malformed or ambiguous legacy se
  assert.throws(()=>runtimeEnv({...input,DATABASE_URL:'postgresql://old'}),/LEGACY_DATABASE_CONFIG_PRESENT/);
 });
 test('gateway and school adapter agree on derived auth and restart-safe encryption',()=>{
- const gateway=loadConfig({...input,APP_MODE:'live',LINE_DESTINATION:`U${'a'.repeat(32)}`,LINE_LOGIN_CHANNEL_ID:'2011885607',LINE_CHANNEL_SECRET:'line-secret',LINE_ACCESS_TOKEN:'line-access',SCHOOL_ORIGIN:'http://school-adapter:3200'});
+ const gateway=loadConfig({...input,APP_MODE:'live',LINE_LOGIN_CHANNEL_ID:'2011885607',LINE_CHANNEL_SECRET:'line-secret',LINE_ACCESS_TOKEN:'line-access',SCHOOL_ORIGIN:'http://school-adapter:3200'});
  const school=loadSchoolConfig(input),again=loadSchoolConfig({...input});
  assert.equal(gateway.school!.token,school.SCHOOL_SERVICE_TOKEN);
  assert.equal(gateway.databaseUrl,school.SCHOOL_DATABASE_URL);

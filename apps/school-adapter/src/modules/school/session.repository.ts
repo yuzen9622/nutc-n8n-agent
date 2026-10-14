@@ -79,6 +79,16 @@ export class SchoolSessionRepository {
    if(!changed.rowCount)throw new SchoolError('SCHOOL_LOGIN_REQUIRED');return result.data;
   });
  }
+ async withExpected<T>(repository:import('./leave.repository.js').LeaveRepository,auth:import('../../../../shared/leave-contract.js').LeaveAuth,expectedSession:string,handler:(stored:StoredSchoolSession,task:import('./leave.repository.js').LeaveTask,client:PoolClient)=>Promise<{cookies:string;data:T}>):Promise<T>{
+  return repository.transaction(async client=>{
+   const task=await repository.guard(client,auth,expectedSession);
+   const row=(await client.query('SELECT encrypted_cookies FROM campus_school_sessions WHERE id=$1',[expectedSession])).rows[0];
+   const result=await handler({id:expectedSession,cookies:this.crypto.open(row.encrypted_cookies,task.user_id,expectedSession)},task,client);
+   if(result.cookies.length>128*1024)throw new SchoolError('SCHOOL_SESSION_TOO_LARGE');
+   const changed=await client.query("UPDATE campus_school_sessions SET encrypted_cookies=$3,last_used_at=now() WHERE user_id=$1 AND id=$2 AND expires_at>clock_timestamp() AND last_used_at>clock_timestamp()-interval '30 minutes'",[task.user_id,expectedSession,this.crypto.seal(result.cookies,task.user_id,expectedSession)]);
+   if(!changed.rowCount)throw new SchoolError('SCHOOL_LOGIN_REQUIRED');return result.data;
+  });
+ }
  async invalidate(userId:string,id:string){await this.pool.query("UPDATE campus_school_sessions SET encrypted_cookies='',expires_at=now() WHERE user_id=$1 AND id=$2",[userId,id]);}
  async cleanup(){
   await this.pool.query("UPDATE campus_school_sessions SET encrypted_cookies='' WHERE encrypted_cookies<>'' AND (expires_at<=now() OR last_used_at<=now()-interval '30 minutes')");

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../apps/gateway/src/config/env.js';
 import { runtimeEnv } from '../apps/shared/runtime-config.mjs';
-const base={APP_MODE:'live',LINE_DESTINATION:`U${'a'.repeat(32)}`,LINE_LOGIN_CHANNEL_ID:'2011885607',
+const base={APP_MODE:'live',LINE_LOGIN_CHANNEL_ID:'2011885607',
  LINE_CHANNEL_SECRET:'test-line-secret',LINE_ACCESS_TOKEN:'test-access',APP_MASTER_KEY:'a1'.repeat(32),POSTGRES_PASSWORD:'test-password',
  N8N_WEBHOOK_URL:'http://n8n:5678/webhook/campus-agent-live'};
 const derived=runtimeEnv(base);
@@ -34,11 +34,15 @@ test('gateway never loads Google credentials or models, even when old env fields
  assert(!JSON.stringify(result).includes(gemini.GEMINI_CHAT_KEY));
  assert.deepEqual(loadConfig({...base,GEMINI_CHAT_KEY:'partial-old-config'}),loadConfig(base));
 });
-test('Google Search stays disabled independently and calls only the n8n search workflow',()=>{
+test('gateway has no Google Search or Brave runtime wiring; old env values are ignored',()=>{
  const setup={...base,PUBLIC_ORIGIN:'https://campus.example',LIFF_ID:'2011885607-test'};
- assert.equal(loadConfig(setup).grounding,undefined);
- assert.deepEqual(loadConfig({...setup,GOOGLE_SEARCH_ENABLED:'true'}).grounding,{url:'http://n8n:5678/webhook/campus-google-search',token:derived.N8N_WEBHOOK_TOKEN});
- assert.throws(()=>loadConfig({...base,GOOGLE_SEARCH_ENABLED:'true'}),/GOOGLE_SEARCH_CONFIGURATION_INCOMPLETE/);
+ const removedFlag=['GOOGLE','SEARCH','ENABLED'].join('_');
+ const old={[removedFlag]:'true',BRAVE_API_KEY:'old-brave-key',OFFICIAL_HOSTS_FILE:'/must/not/be/read.json'};
+ const result=loadConfig({...setup,...old});
+ assert.deepEqual(result,loadConfig(setup));
+ for(const field of ['grounding','hosts','braveKey'])assert.equal(Object.hasOwn(result,field),false);
+ assert(!JSON.stringify(result).includes('old-brave-key'));
+ assert.doesNotThrow(()=>loadConfig({...base,[removedFlag]:'true'}));
 });
 test('LIFF config requires the correct login channel and a bare HTTPS origin',()=>{
  const setup={...base,PUBLIC_ORIGIN:'https://campus.example',LIFF_ID:'2011885607-test'};

@@ -13,6 +13,7 @@ export const SCHOOL={
   absence:'https://ais.nutc.edu.tw/student/discipline/absence_list.aspx',
   historyScores:'https://ais.nutc.edu.tw/student/grade/my_hist_grade.aspx',
   currentScores:'https://ais.nutc.edu.tw/student/grade/my_grade.aspx',
+  leaveClasses:'https://ais.nutc.edu.tw/student/WebService.asmx/stuClassByDate',
   absenceNotes:'https://ais.nutc.edu.tw/student/apps/my_absence_notes.aspx',
   absenceNoteCreate:'https://ais.nutc.edu.tw/student/apps/my_absence_note_form.aspx?anid=0',
   webmailSubmenu:'https://webmail.nutc.edu.tw/cgi-bin/submenu',

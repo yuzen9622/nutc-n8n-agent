@@ -19,7 +19,7 @@ test('public ingress cannot proxy internal paths, validates host and preserves s
  try{
   assert.equal(await call('/liff/'),200);assert.equal(await call('/liff?code=sensitive&state=test&liff.state=%2F'),200);assert.equal(await call('/liff-other'),404);assert.equal(await call('/liff/config'),503);
   assert.equal(await call('/liff/','GET','attacker.example'),421);
-  for(const path of ['/internal/v1/agent/prepare','/providers/gemini/v1beta/models/x:generateContent','/liff/../internal/v1/agent/prepare','/line/webhook?extra=1','//line/webhook'])assert.equal(await call(path,'POST'),404);
+  for(const path of ['/internal/v1/agent/prepare','/providers/gemini/v1beta/models/x:generateContent','/liff/../internal/v1/agent/prepare','/line/webhook?extra=1','//line/webhook',['','liff','result'].join('/')])assert.equal(await call(path,'POST'),404);
   assert.equal(called,0);assert.equal(await call('/line/webhook','POST'),200);assert.equal(called,1);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

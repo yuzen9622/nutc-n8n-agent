@@ -1,11 +1,10 @@
 import type { ServerResponse } from 'node:http';
 import { json } from '../../utils/http.js';
 const css=`:root{font-family:system-ui,sans-serif;color:#142b40;background:#f2f5f8}body{margin:0;padding:24px}main{max-width:480px;margin:8vh auto;background:white;border-radius:20px;padding:28px;box-shadow:0 12px 36px #142b4012}h1{font-size:24px;line-height:1.4}p{line-height:1.7}button{width:100%;padding:14px;border:0;border-radius:10px;background:#087b4a;color:white;font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.55}label{display:block;margin:16px 0}input{display:block;box-sizing:border-box;width:100%;padding:12px;margin-top:6px;font:inherit}small{display:block;line-height:1.6;color:#526477;margin-top:24px}`;
-const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>中科大校園助理</title><style>${css}</style></head><body><main><h1>中科大校園助理</h1><p>登入 LINE 進行校務身分綁定。</p><p id="status" role="status" aria-live="polite">載入中…</p><button id="login" type="button" disabled>使用 LINE 登入</button><section id="search-result" hidden></section><form id="binding" hidden><label>學號<input name="account" required maxlength="32" autocomplete="username" pattern="[A-Za-z0-9]+"></label><label>校務密碼<input name="password" type="password" required maxlength="256" autocomplete="current-password"></label><button id="bind" type="submit">綁定校務帳號</button></form><small>公開問答及本人的校務查詢結果會提供給 Google Gemini 整理，回覆可能保留在本人隔離的對話記憶中，最多七天。校務登入密碼與 Cookie 不提供給模型，密碼不保存。請勿在 LINE 對話輸入密碼。</small></main><script src="https://static.line-scdn.net/liff/edge/versions/2.31.1/sdk.js" charset="utf-8" defer></script><script src="/liff/app.js" defer></script></body></html>`;
+const html=`<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>中科大校園助理</title><style>${css}</style></head><body><main><h1>中科大校園助理</h1><p>登入 LINE 進行校務身分綁定。</p><p id="status" role="status" aria-live="polite">載入中…</p><button id="login" type="button" disabled>使用 LINE 登入</button><form id="binding" hidden><label>學號<input name="account" required maxlength="32" autocomplete="username" pattern="[A-Za-z0-9]+"></label><label>校務密碼<input name="password" type="password" required maxlength="256" autocomplete="current-password"></label><button id="bind" type="submit">綁定校務帳號</button></form><small>公開問答及本人的校務查詢結果會提供給 Google Gemini 整理，回覆可能保留在本人隔離的對話記憶中，最多七天。校務登入密碼與 Cookie 不提供給模型，密碼不保存。請勿在 LINE 對話輸入密碼。</small></main><script src="https://static.line-scdn.net/liff/edge/versions/2.31.1/sdk.js" charset="utf-8" defer></script><script src="/liff/app.js" defer></script></body></html>`;
 const script=`'use strict';
 const button=document.getElementById('login'),status=document.getElementById('status');
 let csrfToken;
-const resultId=new URLSearchParams(location.search).get('result')||new URLSearchParams(new URLSearchParams(location.search).get('liff.state')?.replace(/^[?]/, '')||'').get('result');
 const form=document.getElementById('binding');
 form.addEventListener('submit',async event=>{
  event.preventDefault();const submit=document.getElementById('bind');submit.disabled=true;
@@ -38,12 +37,6 @@ async function verify(){
    return;
   }
   const verified=await res.json();if(!verified.csrfToken)throw Error('SESSION');csrfToken=verified.csrfToken;
-  if(resultId){
-   const response=await fetch('/liff/result',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({taskId:resultId})});
-   if(!response.ok){status.textContent='這份搜尋回答已過期或不屬於目前帳號。';return;}
-   const result=await response.json();const section=document.getElementById('search-result');
-   section.attachShadow({mode:'closed'}).innerHTML=result.html;section.hidden=false;button.hidden=true;status.textContent='Google 搜尋回答';return;
-  }
   button.hidden=true;form.hidden=false;status.textContent='LINE 身分已驗證。請輸入本人的校務帳號；密碼不會保存。';
  }catch{
   status.textContent='無法完成 LINE 驗證，請點擊下方重新登入。';
@@ -60,7 +53,7 @@ async function verify(){
   button.addEventListener('click',()=>{
    button.disabled=true;
    try{if(liff.isLoggedIn())liff.logout();}catch(e){void e;}
-   liff.login({redirectUri:config.endpoint+(resultId?'?result='+encodeURIComponent(resultId):'')});
+   liff.login({redirectUri:config.endpoint});
   });
  }catch{status.textContent='服務尚未完成設定，請稍後再試。';}
 })();`;

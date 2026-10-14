@@ -8,10 +8,12 @@ const errorUrl=dataUrl(readFileSync(root+'utils/school-error.js','utf8'));
 const moduleUrl=name=>dataUrl(readFileSync(root+'modules/school/'+name,'utf8').replaceAll("'../../utils/school-error.js'",JSON.stringify(errorUrl)));
 const faultUrl=dataUrl(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8'));
 const bindingUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/liff/binding.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)));
-const lineRepositoryUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)));
+// This checker exercises follower/revocation behavior only; leave binding itself is covered by check-leave-database.
+const leaveBindingStubUrl=dataUrl('export async function bindLeaveConfirmation(){}');
+const lineRepositoryUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.repository.js','utf8').replaceAll("'../../utils/fault.js'",JSON.stringify(faultUrl)).replaceAll("'../tasks/task.repository.js'",JSON.stringify(leaveBindingStubUrl)));
 const lineServiceUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/line/line.service.js','utf8'));
 const schema='school_test_'+randomUUID().replaceAll('-','');
-const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(n=>readFileSync('apps/gateway/migrations/'+n,'utf8')).join('\n');
+const sql=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql','017-leave-preview-confirmation.sql'].map(n=>readFileSync('apps/gateway/migrations/'+n,'utf8')).join('\n');
 const source=`
 import assert from 'node:assert/strict';
 import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';

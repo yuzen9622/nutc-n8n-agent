@@ -54,7 +54,7 @@ services:
       EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: 'false'
       EXECUTIONS_DATA_PRUNE: 'true'
       EXECUTIONS_DATA_MAX_AGE: 24
-      # Five Agent tasks plus up to five nested search executions.
+      # Five Agent tasks plus headroom for concurrent tool and editor executions.
       N8N_CONCURRENCY_PRODUCTION_LIMIT: 10
       N8N_DIAGNOSTICS_ENABLED: 'false'
       N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
@@ -128,12 +128,10 @@ services:
       LINE_MESSAGING_CHANNEL_ID: ${LINE_MESSAGING_CHANNEL_ID:?Required}
       LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:?Required}
       LINE_ACCESS_TOKEN: ${LINE_ACCESS_TOKEN:?Required}
-      LINE_DESTINATION: ${LINE_DESTINATION:?Required}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Required}
       LIFF_ID: ${LIFF_ID:?Required}
       SCHOOL_ORIGIN: http://school-adapter:3200
       N8N_WEBHOOK_URL: http://n8n:5678/webhook/campus-agent-live
-      GOOGLE_SEARCH_ENABLED: ${GOOGLE_SEARCH_ENABLED:-false}
     ports: ['127.0.0.1:3100:3100']
     networks: [backend, public]
     depends_on:

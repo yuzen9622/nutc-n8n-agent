@@ -13,6 +13,7 @@ export function schoolRouter(controller:SchoolController,token:string){
    const supplied=req.headers['x-campus-school'];
    if(typeof supplied!=='string'||!timingSafeEqual(expected,createHash('sha256').update(supplied).digest()))return reply(res,401,{error:'SERVICE_AUTH_REQUIRED'});
    if(req.method==='POST'&&req.url==='/internal/v1/school/login')return await controller.login(req,res);
+   if(req.method==='POST'&&req.url==='/internal/v1/school/leave')return await controller.leave(req,res);
    if(req.method==='POST'&&req.url==='/internal/v1/school/query')return await controller.query(req,res);
    reply(res,404,{error:'NOT_FOUND'});
   }catch(error){

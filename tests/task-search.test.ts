@@ -12,15 +12,6 @@ test('configured public search records evidence without a budget dependency',asy
  assert('sources' in result);assert.deepEqual(result.sources,sources);
  assert.deepEqual(steps,['authorize','search','evidence']);
 });
-test('grounded search remains owner-bound and takes precedence over other public search',async()=>{
- const steps:string[]=[];
- const repository={authorizeTool:async()=>{steps.push('authorize');return {id:'task',userId:'owner'};},recordGrounded:async(value:unknown,html:string)=>{assert.deepEqual(value,auth);assert.equal(html,'<article>grounded</article>');steps.push('record');return {status:'grounded_answer_ready'};}};
- const search={search:async()=>{throw new Error('wrong provider');}};
- const grounding={searchHtml:async(query:string)=>{assert.equal(query,'question');steps.push('grounding');return '<article>grounded</article>';}};
- const service=new TaskService(repository as never,{} as never,search as never,undefined,grounding as never);
- assert.deepEqual(await service.tool(auth,'web','question'),{status:'grounded_answer_ready'});
- assert.deepEqual(steps,['authorize','grounding','record']);
-});
 test('tool authorization and unconfigured search still fail closed before provider calls',async()=>{
  let requests=0;
  const search={search:async()=>{requests++;return [];}};

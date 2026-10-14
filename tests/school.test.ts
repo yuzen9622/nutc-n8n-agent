@@ -161,7 +161,7 @@ test('student grades query parses multiple semesters, averages, conduct, rank, a
  assert.equal(sem2.classRank,1);
 });
 
-test('student leave query parses leave notes and submit sends compliant form payload',async()=>{
+test('student leave records remain safe; legacy apply is rejected without any I/O',async()=>{
  const notesHtml='<table class="grid_view">'
   +'<tr data-key="101"><td>1</td><td>2026/04/20</td><td>[事假] <i>04/20 第1-2節</i><br>家裡有事</td><td>核准</td><td>審核中</td><td>准假</td></tr>'
   +'</table>';
@@ -183,17 +183,9 @@ test('student leave query parses leave notes and submit sends compliant form pay
   date:'2026/04/29',begin_sec:1,end_sec:2,leave_type:'病假',reason:'流感就診'
  });
  assert.equal(submitResult.kind,'leave_apply');
- assert.equal(submitResult.success,true);
- assert(submittedBody);
- const params=new URLSearchParams(submittedBody);
- assert.equal(params.get('anid'),'0');
- assert.equal(params.get('date'),'2026/04/29');
- assert.equal(params.get('begin_sec'),'1');
- assert.equal(params.get('end_sec'),'2');
- assert.equal(params.get('an_type'),'2');
- assert.equal(params.get('reason'),'流感就診');
- assert.equal(params.get('update'),'儲存');
- assert.equal(params.get('detail'),'[[1,1],[1,2]]');
+ assert.equal(submitResult.success,false);
+ assert.equal(submittedBody,undefined);
+ assert.match(submitResult.message,/預覽/);
 
  const incomplete=await service.query(submitClient,'leave_apply',{reason:''});
  assert.equal(incomplete.success,false);

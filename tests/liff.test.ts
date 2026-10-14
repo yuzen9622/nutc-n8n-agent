@@ -9,7 +9,7 @@ import { lineRouter } from '../apps/gateway/src/modules/line/line.router.js';
 test('LIFF endpoint preserves SDK callbacks and identity rejects cross-origin before verification',async()=>{
   const origin='https://campus.example'; let verified=0;
   const service=new LineService({accept:async()=>{},identity:async()=>({sessionKey:'test'})},{verifyIdentity:async()=>{verified++;return `U${'a'.repeat(32)}`;}});
-  const server=createServer(lineRouter(new LineController(service,'secret','destination',origin),undefined,new LiffController(origin,'2011885607-test')));
+  const server=createServer(lineRouter(new LineController(service,'secret',origin),undefined,new LiffController(origin,'2011885607-test')));
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   try{
@@ -31,9 +31,15 @@ test('LIFF endpoint preserves SDK callbacks and identity rejects cross-origin be
     assert.deepEqual(await allowed.json(),{verified:true});
   }finally{server.closeAllConnections();await new Promise<void>((resolve,reject)=>server.close(err=>err?reject(err):resolve()));}
 });
-test('LIFF browser script compiles and keeps grounded results in an isolated style root',async()=>{
+test('LIFF browser script compiles, keeps login/binding and has no removed result-page code',async()=>{
  const server=createServer((_req,res)=>new LiffController('https://campus.example','2011885607-test').handle('/liff/app.js',res));
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
- try{const js=await(await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/liff/app.js`)).text();assert.doesNotThrow(()=>new Function(js));assert(js.includes("attachShadow({mode:'closed'})"));assert(js.includes("'/liff/result'"));}
+ try{
+  const js=await(await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/liff/app.js`)).text();
+  assert.doesNotThrow(()=>new Function(js));
+  for(const required of ["'/liff/identity'","'/liff/bind'",'X-CSRF-Token','liff.login'])assert(js.includes(required),required);
+  for(const removed of ['attachShadow',['','liff','result'].join('/'),'resultId','innerHTML'])assert(!js.includes(removed),removed);
+  assert(js.includes('liff.login({redirectUri:config.endpoint})'));
+ }
  finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

@@ -6,14 +6,18 @@ import { randomUUID } from 'node:crypto';
 const schema=`line_test_${randomUUID().replaceAll('-','')}`;
 const faultUrl='data:text/javascript;base64,'+Buffer.from(readFileSync('dist/apps/gateway/src/utils/fault.js','utf8')).toString('base64');
 const loadRepository=path=>readFileSync(path,'utf8').replace("'../../utils/fault.js'",JSON.stringify(faultUrl));
-const repository=loadRepository('dist/apps/gateway/src/modules/line/line.repository.js');
-const taskRepository=loadRepository('dist/apps/gateway/src/modules/tasks/task.repository.js');
-const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql'].map(name=>readFileSync(`apps/gateway/migrations/${name}`,'utf8')).join('\n');
+const dataUrl=source=>'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
+const leaveUrl=dataUrl(readFileSync('dist/apps/shared/leave-contract.js','utf8').replace("'zod'","'file:///app/node_modules/zod/index.js'"));
+const renderUrl=dataUrl(readFileSync('dist/apps/gateway/src/modules/personal/personal.render.js','utf8').replace("'../../../../shared/leave-contract.js'",JSON.stringify(leaveUrl)));
+const taskRepository=loadRepository('dist/apps/gateway/src/modules/tasks/task.repository.js').replace("'../../../../shared/leave-contract.js'",JSON.stringify(leaveUrl)).replace("'../personal/personal.render.js'",JSON.stringify(renderUrl));
+const taskRepositoryUrl=dataUrl(taskRepository);
+const repository=loadRepository('dist/apps/gateway/src/modules/line/line.repository.js').replace("'../tasks/task.repository.js'",JSON.stringify(taskRepositoryUrl));
+const migration=['002-line-inbox.sql','003-task-dispatch.sql','004-public-evidence.sql','005-school-sessions.sql','006-liff-sessions.sql','007-private-results.sql','009-school-login-notice.sql','010-google-grounded-results.sql','011-provider-http-outcomes.sql','012-school-login-outcomes.sql','013-school-auth-rejections.sql','015-public-line-access.sql','017-leave-preview-confirmation.sql'].map(name=>readFileSync(`apps/gateway/migrations/${name}`,'utf8')).join('\n');
 const password=requiredEnv('POSTGRES_PASSWORD');
 const script=`
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
-import pg from '/usr/local/lib/node_modules/n8n/node_modules/pg/lib/index.js';
+import pg from '/app/node_modules/pg/lib/index.js';
 const {LineRepository}=await import('data:text/javascript;base64,${Buffer.from(repository).toString('base64')}');
 const {TaskRepository}=await import('data:text/javascript;base64,${Buffer.from(taskRepository).toString('base64')}');
 const pool=new pg.Pool({host:'postgres',database:'campus_agent',user:'campus_agent',password:${JSON.stringify(password)},max:5,options:'-c search_path=${schema}'});
@@ -155,24 +159,16 @@ try {
  const legacyOff='U'+'e'.repeat(32);await pool.query('INSERT INTO campus_identities(user_id,invited) VALUES($1,false)',[legacyOff]);
  assert.equal((await repo.identity(legacyOff)).sessionKey.startsWith('line:'),true);
  assert.equal((await pool.query('SELECT invited FROM campus_identities WHERE user_id=$1',[legacyOff])).rows[0].invited,false);
- const ground=await startPrivate('grounded-answer');
- const groundHandle=await noticeQueue.recordGrounded(ground.auth,'<article>GROUNDING ANSWER SENTINEL</article>');
- assert(!JSON.stringify(groundHandle).includes('SENTINEL'));
- await assert.rejects(noticeQueue.groundedResult(d,ground.task.id));
- await noticeQueue.complete(ground.task,'model must not replace this');
- assert.equal(await noticeQueue.groundedResult(d,ground.task.id),'<article>GROUNDING ANSWER SENTINEL</article>');
- await assert.rejects(noticeQueue.groundedResult(b,ground.task.id));
- assert(!(await pool.query('SELECT grounded_reply FROM campus_tasks WHERE id=$1',[ground.task.id])).rows[0].grounded_reply.includes('SENTINEL'));
- const groundReply=(await pool.query('SELECT reply FROM campus_outbox WHERE task_id=$1',[ground.task.id])).rows[0].reply;
- assert(groundReply.includes('?result='+ground.task.id));assert(!groundReply.includes('model must not replace'));
- await pool.query("UPDATE campus_tasks SET grounded_at=now()-interval '2 days' WHERE id=$1",[ground.task.id]);
- await assert.rejects(noticeQueue.groundedResult(d,ground.task.id));await noticeQueue.cleanup();
- assert.equal((await pool.query('SELECT grounded_reply FROM campus_tasks WHERE id=$1',[ground.task.id])).rows[0].grounded_reply,null);
- const clearedGround=await startPrivate('grounded-clear');
- await noticeQueue.recordGrounded(clearedGround.auth,'grounded clear fixture');await noticeQueue.complete(clearedGround.task,'');
- await repo.accept('clear-grounded-owner',d,'','clear');
- await assert.rejects(noticeQueue.groundedResult(d,clearedGround.task.id));
- assert.equal((await pool.query('SELECT grounded_reply FROM campus_tasks WHERE id=$1',[clearedGround.task.id])).rows[0].grounded_reply,null);
+ await pool.query("UPDATE campus_outbox SET state='cancelled',reply='' WHERE state='pending'");
+ const direct=await startPrivate('direct-public-summary');
+ const directReply='公開查證摘要：官方網站目前可用。\\n來源：https://www.nutc.edu.tw/';
+ await noticeQueue.complete(direct.task,directReply);
+ const directOutbox=(await pool.query('SELECT reply,encrypted FROM campus_outbox WHERE task_id=$1',[direct.task.id])).rows[0];
+ assert.equal(directOutbox.reply,directReply);assert.equal(directOutbox.encrypted,false);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_outbox_sources WHERE outbox_id=(SELECT id FROM campus_outbox WHERE task_id=$1)',[direct.task.id])).rows[0].n,0);
+ assert.equal((await pool.query('SELECT count(*)::int n FROM campus_task_evidence WHERE task_id=$1',[direct.task.id])).rows[0].n,0);
+ let directDelivered=false;await noticeQueue.deliverOne(async(user,reply)=>{assert.equal(user,d);assert.equal(reply,directReply);directDelivered=true;});assert(directDelivered);
+ await assert.rejects(noticeQueue.complete(direct.task,'second completion must not replace the first'));
  const fresh=Array.from({length:6},(_,i)=>'U'+String(i+1).repeat(32));
  const firstContact=await Promise.all(fresh.flatMap(user=>[repo.identity(user),repo.accept('first-a-'+user,user,'公開首次','message'),repo.identity(user),repo.accept('first-b-'+user,user,'公開首次','message')]));
  assert.equal(firstContact.length,24);
@@ -228,7 +224,7 @@ try {
  await pool.query('UPDATE campus_identities SET invited=false WHERE user_id=$1',[u1]);
  assert.equal((await pool.query('SELECT count(*)::int n FROM campus_school_sessions WHERE user_id=$1',[u1])).rows[0].n,1);
  await repo.identity(u1);
- console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['identity generation change erases grounded content immediately','grounded result owner isolation and encryption','grounded result only after completion','grounded answer cannot be replaced by outer agent','grounded result expiration and cleanup','concurrent deduplication','public first-contact admission and legacy invited=false use','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','superseded and expired evidence rejected','private tool returns only task-owner school data to Gemini with lease-bound reference','private result and outbox encryption','private completion binds lease and owner','owner-only model answer encrypted at rest and decrypted only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores revoked user; delayed follow cannot undo revocation','resume is idempotent and rotates generation','resume never restores deleted school session','concurrent first contact creates one identity without unique failure and never admits revoked','multiple unknown users get isolated memory, school cookies, private refs and outbox','revocation without any invitation list clears only that user','revoked user denied until explicit resume','invited column changes have no authority or cleanup effect'],externalLine:false}));
+ console.log(JSON.stringify({database:true,syntheticTestInputs:true,checks:['direct public Agent summary completes to durable outbox and fake delivery without result page or evidence rows','concurrent deduplication','public first-contact admission and legacy invited=false use','user isolation','memory clear','generation rotation','idempotent clear','revoke blocks new tasks','one concurrent lease per user','lease-bound completion','single atomic outbox','stable delivery retry key','stale generation rejected','seven-day memory cleanup','single prepare checkpoint','capability hash verification','four-call tool budget','native memory rejects cleared and revoked sessions','task-bound official evidence','cross-task citation rejection','local official source links','withdrawal cancels queued factual delivery','withdrawn sources cannot auto-reactivate','superseded and expired evidence rejected','private tool returns only task-owner school data to Gemini with lease-bound reference','private result and outbox encryption','private completion binds lease and owner','owner-only model answer encrypted at rest and decrypted only at delivery','expired school session cancels queued private reply','login notice survives repository restart','login notice URL cannot be chosen by model','model failure retains required-login guidance','revocation and lease protect login notices','only explicit resume restores revoked user; delayed follow cannot undo revocation','resume is idempotent and rotates generation','resume never restores deleted school session','concurrent first contact creates one identity without unique failure and never admits revoked','multiple unknown users get isolated memory, school cookies, private refs and outbox','revocation without any invitation list clears only that user','revoked user denied until explicit resume','invited column changes have no authority or cleanup effect'],externalLine:false}));
 } catch(error) {
  console.log(JSON.stringify({failed:true,name:error.name,code:error.code,message:error.message}));
  process.exitCode=1;
@@ -238,7 +234,7 @@ try {
 }
 `;
 try {
- const output=execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','n8n','node','--input-type=module'],{input:script,encoding:'utf8',stdio:['pipe','pipe','pipe']});
+ const output=execFileSync('docker',['compose','--env-file','.env','-f','docker-compose.yml','exec','-T','school-adapter','node','--input-type=module'],{input:script,encoding:'utf8',stdio:['pipe','pipe','pipe']});
  const result={checkedAt:new Date().toISOString(),...JSON.parse(output.trim())};
  mkdirSync('.local/verification',{recursive:true});writeFileSync('.local/verification/line-database.json',JSON.stringify(result,null,2)+'\n');
  console.log(JSON.stringify(result,null,2));

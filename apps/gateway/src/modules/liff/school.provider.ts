@@ -1,4 +1,5 @@
 import {personalDataSchema,type PersonalAction} from '../personal/personal.schema.js';
+import {leaveReplySchema,leaveRpcSchema,type LeaveAuth,type LeaveIntent} from '../../../../shared/leave-contract.js';
 import {z} from 'zod';
 import {Fault} from '../../utils/fault.js';
 const failures=new Set(['SCHOOL_CREDENTIALS_REJECTED','SCHOOL_AUTHENTICATION_REJECTED','SCHOOL_LOGIN_RATE_LIMIT','SCHOOL_LOGIN_BUSY','SCHOOL_ACCOUNT_ALREADY_BOUND','SCHOOL_ACCOUNT_LOCKED','SCHOOL_CAPTCHA_FAILED']);
@@ -19,6 +20,16 @@ export class SchoolProvider {
   const parsed=z.object({data:z.object({sessionId:z.string().uuid(),result:personalDataSchema})}).safeParse(value);
   if(!parsed.success||parsed.data.data.result.kind!==action)throw new Fault(502,'SCHOOL_RESPONSE_INVALID');
   return parsed.data.data;
+ }
+ async leave(auth:LeaveAuth,operation:'preview'|'confirm',intent?:LeaveIntent){
+  const payload=leaveRpcSchema.parse(operation==='preview'?{auth,operation,intent}:{auth,operation});
+  try{
+   const response=await this.request(`${this.origin}/internal/v1/school/leave`,{method:'POST',headers:{'content-type':'application/json','x-campus-school':this.token},body:JSON.stringify(payload),redirect:'error',signal:AbortSignal.timeout(42000)});
+   const reader=response.body?.getReader();if(!reader)throw new Fault(502,'SCHOOL_UNAVAILABLE');let length=0;const chunks:Uint8Array[]=[];
+   try{while(true){const next=await reader.read();if(next.done)break;length+=next.value.length;if(length>16384)throw new Fault(502,'SCHOOL_RESPONSE_TOO_LARGE');chunks.push(next.value);}}finally{await reader.cancel();}
+   const value:unknown=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!response.ok)throw new Fault(503,'SCHOOL_UNAVAILABLE');
+   return z.strictObject({data:leaveReplySchema}).parse(value).data;
+  }catch{throw new Fault(503,'SCHOOL_UNAVAILABLE');}
  }
  async bind(userId:string,account:string,password:string){
   const response=await this.request(`${this.origin}/internal/v1/school/login`,{method:'POST',headers:{'content-type':'application/json','x-campus-school':this.token},body:JSON.stringify({userId,account,password}),redirect:'error',signal:AbortSignal.timeout(35000)});

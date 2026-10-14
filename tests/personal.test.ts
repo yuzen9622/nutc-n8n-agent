@@ -57,10 +57,8 @@ test('personal rendering formats grades, leave notes, leave application and mail
   message:'請假單已送出',
   details:{date:'2026/04/29',beginSec:1,endSec:2,typeName:'病假',reason:'看醫生'}
  });
- assert.match(leaveApplySuccess,/請假申請已送出/);
- assert.match(leaveApplySuccess,/日期：2026\/04\/29/);
- assert.match(leaveApplySuccess,/節次：第1節～第2節/);
- assert.match(leaveApplySuccess,/假別：病假/);
+ assert.doesNotMatch(leaveApplySuccess,/已送出/);
+ assert.match(leaveApplySuccess,/预覽|預覽/);
 
  const mailSuccess=renderPersonal({
   kind:'send_mail',
@@ -79,6 +77,7 @@ test('TaskService routes grades, leave and send_mail actions with query or param
  const records:Array<{auth:unknown;action:string;reply:string}>=[];
  const repository={
   authorizeTool:async()=>({userId:'test-user'}),
+  guardLeave:async()=>{},
   recordPersonal:async(authVal:unknown,action:string,_sessionId:string,reply:string)=>{
    records.push({auth:authVal,action,reply});
    return {status:'ready',action,reply};
@@ -116,12 +115,11 @@ test('TaskService routes grades, leave and send_mail actions with query or param
  assert.equal(records[1]?.action,'leave_notes');
 
  // 3. leave apply
- await service.tool(auth,'personal','leave',{action:'apply',date:'2026/04/29',begin_sec:1,end_sec:2,reason:'外出'});
- assert.equal(records[2]?.action,'leave_apply');
- assert.match(records[2]!.reply,/請假申請已送出/);
+ await assert.rejects(service.tool(auth,'personal','leave',{action:'apply',date:'2026/04/29',begin_sec:1,end_sec:2,reason:'外出'}));
+ assert.equal(records.length,2);
 
  // 4. send_mail
  await service.tool(auth,'personal','send_mail',{to:'test@nutc.edu.tw',subject:'測試信件',content:'您好'});
- assert.equal(records[3]?.action,'send_mail');
- assert.match(records[3]!.reply,/信件發送成功/);
+ assert.equal(records[2]?.action,'send_mail');
+ assert.match(records[2]!.reply,/信件發送成功/);
 });

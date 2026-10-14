@@ -29,19 +29,13 @@ test('binding refuses late success when browser session is revoked during school
  const service=new BindingService({issue:async()=>({token:'',csrf:''}),authorize:async()=>{if(!live)throw new Fault(401,'LIFF_SESSION_REQUIRED');return 'verified-owner';}},{verifyIdentity:async()=>''},{bind:async()=>{live=false;}});
  await assert.rejects(service.bind('token','csrf','student','password'),/LIFF_SESSION_REQUIRED/);
 });
-test('grounded result endpoint requires browser session and only uses its verified owner',async()=>{
- const token='t'.repeat(43),csrf='c'.repeat(43),taskId='12345678-1234-4234-8234-123456789012';let reads=0;
- const sessions={authorize:async(t:string,c:string)=>{if(t!==token||c!==csrf)throw new Fault(401,'LIFF_SESSION_REQUIRED');return 'verified-owner';}};
- const tasks={groundedResult:async(user:string,id:string)=>{reads++;assert.equal(user,'verified-owner');assert.equal(id,taskId);return '<article>verified</article>';}};
- const controller=new BindingController({}as BindingService,'https://campus.example',sessions as import('../apps/gateway/src/modules/liff/binding.repository.js').BindingRepository,tasks as unknown as import('../apps/gateway/src/modules/tasks/task.repository.js').TaskRepository);
- const server=createServer(lineRouter({}as LineController,undefined,undefined,controller));
+test('removed result endpoint is not routed even with a valid browser session',async()=>{
+ const token='t'.repeat(43),csrf='c'.repeat(43);let authorized=0;
+ const service=new BindingService({issue:async()=>({token,csrf}),authorize:async()=>{authorized++;return 'owner';}},{verifyIdentity:async()=>'owner'},{bind:async()=>{}});
+ const server=createServer(lineRouter({}as LineController,undefined,undefined,new BindingController(service,'https://campus.example')));
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${(server.address()as AddressInfo).port}`;
- const headers={'Content-Type':'application/json',Origin:'https://campus.example',Cookie:`__Host-campus_liff=${token}`,'X-CSRF-Token':csrf};
- const send=(body:unknown,h=headers)=>fetch(base+'/liff/result',{method:'POST',headers:h,body:JSON.stringify(body)});
  try{
-  assert.equal((await send({taskId},{...headers,'X-CSRF-Token':'wrong'})).status,401);
-  assert.equal((await send({taskId,userId:'attacker'})).status,400);
-  assert.equal((await send({taskId},{...headers,Origin:'https://evil.test'})).status,403);assert.equal(reads,0);
-  const response=await send({taskId});assert.equal(response.status,200);assert.deepEqual(await response.json(),{html:'<article>verified</article>'});assert.equal(reads,1);
+  const response=await fetch(base+['','liff','result'].join('/'),{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://campus.example',Cookie:`__Host-campus_liff=${token}`,'X-CSRF-Token':csrf},body:JSON.stringify({taskId:'12345678-1234-4234-8234-123456789012'})});
+  assert.equal(response.status,404);assert.equal(authorized,0);
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

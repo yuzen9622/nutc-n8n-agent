@@ -10,7 +10,7 @@ import {runtimeEnv} from '../apps/shared/runtime-config.mjs';
 
 const env={POSTGRES_PASSWORD:'db-secret',APP_MASTER_KEY:'a1'.repeat(32)};
 const input=()=>JSON.stringify(buildInternalCredentials(env));
-const workflows=()=>['campusNativeAgentLive','campusKnowledgeIngest','campusGoogleSearch'].map(id=>JSON.parse(readFileSync(`workflows/agent/${id}.json`,'utf8')));
+const workflows=()=>['campusNativeAgentLive','campusKnowledgeIngest'].map(id=>JSON.parse(readFileSync(`workflows/agent/${id}.json`,'utf8')));
 function harness({owner=true,existing=false,locked=true,failAt=0}={}){
   const queries:{sql:string;values?:string[][]}[]=[],commands:SetupCommand[]=[],messages:string[]=[];
   const client={query:async(sql:string,values?:string[][])=>{
@@ -26,7 +26,7 @@ function harness({owner=true,existing=false,locked=true,failAt=0}={}){
   return {queries,commands,messages,options};
 }
 
-test('manual plan imports exactly three derived internal credentials and three inactive workflows without publishing',()=>{
+test('manual plan imports exactly three derived internal credentials and two inactive workflows without publishing',()=>{
   const credentials=buildInternalCredentials(env),derived=runtimeEnv(env);
   assert.deepEqual(credentials.map(c=>c.id),['campus-agent-postgres','campus-live-service','campus-live-webhook']);
   assert.deepEqual(credentials[0]!.data,{host:'postgres',port:5432,database:'campus_agent',user:'campus_agent',password:env.POSTGRES_PASSWORD,ssl:'disable'});
@@ -52,7 +52,7 @@ test('fresh metadata database requires owner and absent targets; holds the same 
   assert(h.queries.every(q=>q.sql.startsWith('SELECT ')));
   assert.match(h.queries[1]!.sql,/FROM "user" WHERE email IS NOT NULL/);
   assert(!h.queries[1]!.sql.includes('roleSlug'));
-  assert.deepEqual(h.queries[2]!.values,[['campus-agent-postgres','campus-live-service','campus-live-webhook'],['campusNativeAgentLive','campusKnowledgeIngest','campusGoogleSearch']]);
+  assert.deepEqual(h.queries[2]!.values,[['campus-agent-postgres','campus-live-service','campus-live-webhook'],['campusNativeAgentLive','campusKnowledgeIngest']]);
   assert.match(h.queries.at(-1)!.sql,/pg_advisory_unlock/);
   assert.equal(h.messages.length,2);
 });
@@ -68,7 +68,7 @@ test('owner missing or any target existing refuses without CLI or DB writes',asy
 });
 
 test('each of the six target IDs is queried, so partial imports naturally refuse retry',async()=>{
-  for(const id of ['campus-agent-postgres','campus-live-service','campus-live-webhook','campusNativeAgentLive','campusKnowledgeIngest','campusGoogleSearch']){
+  for(const id of ['campus-agent-postgres','campus-live-service','campus-live-webhook','campusNativeAgentLive','campusKnowledgeIngest']){
     const h=harness();const query=h.options.client.query;
     h.options.client.query=async(sql,values)=>sql.includes(' AS existing')?{rows:[{existing:values!.flat().includes(id)}]}:query(sql,values);
     await assert.rejects(setupN8n(h.options),/SETUP_TARGET_EXISTS/);assert.equal(h.commands.length,0);
@@ -112,6 +112,9 @@ test('workflow contracts reject unknown IDs, activation, alias/type mismatch and
     (w:any[])=>{w[0].nodes[0].credentials.httpHeaderAuth.name='alias';},
     (w:any[])=>{w[0].nodes[0].credentials={postgres:{id:'campus-live-webhook',name:'Campus live webhook'}};},
     (w:any[])=>{w[0].nodes.find((n:any)=>/GoogleGemini/.test(n.type)).credentials={googlePalmApi:{id:'fake',name:'fake'}};},
+    (w:any[])=>{w[0].nodes.find((n:any)=>n.name==='official_search').credentials={googlePalmApi:{id:'fake',name:'fake'}};},
+    (w:any[])=>{w.pop();},
+    (w:any[])=>{w.push({...w[0]});},
   ]){const w=workflows();mutate(w);assert.throws(()=>setupPlan(input(),w),/SETUP_(INVALID_WORKFLOWS|UNKNOWN_CREDENTIAL)/);}
 });
 

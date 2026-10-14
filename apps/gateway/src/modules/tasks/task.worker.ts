@@ -21,7 +21,7 @@ export class TaskWorker {
     if(!task) return false;
     // Only claimed/authorized tasks get an animation, never raw webhook events.
     // Await its bounded request so it cannot arrive after the actual reply.
-    try { await this.startLoading?.(task.userId); } catch { this.onError(); }
+    try { if(task.deliveryMode!=='capture')await this.startLoading?.(task.userId); } catch { this.onError(); }
     try { await this.dispatch(task,this.dispatchSignal); }
     catch { await this.queue.fail(task); }
     return true;

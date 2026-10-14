@@ -7,7 +7,7 @@ import {parseSchedule} from './schedule.parse.js';
 import {parseAbsences} from './absence.parse.js';
 import {parseLastPageNumber,parseAnnouncementList} from './announcement.parse.js';
 import {computeAverageScore,normalizeSemester,parseHistoryGrades,parseHistoryGradeSummaries} from './grade.parse.js';
-import {buildLeaveSubmissionPayload,normalizeLeaveType,parseAbsenceNotes} from './leave.parse.js';
+import {parseAbsenceNotes} from './leave.parse.js';
 import {buildMailSendForm,parseGenMailPath,parseHiddenInputs,type ComposeDefaults} from './mail.parse.js';
 
 export type StudentAction='schedule'|'absence'|'announcements'|'grades'|'leave_notes'|'leave_apply'|'send_mail';
@@ -65,44 +65,7 @@ export class StudentService {
    const items=parseAbsenceNotes(html);return {kind:'leave_notes' as const,items};
   }
 
-  if(action==='leave_apply'){
-   const date=typeof params.date==='string'?params.date:'';
-   const reason=typeof params.reason==='string'?params.reason:'';
-   const beginSec=typeof params.begin_sec==='number'?params.begin_sec:typeof params.beginSec==='number'?params.beginSec:1;
-   const endSec=typeof params.end_sec==='number'?params.end_sec:typeof params.endSec==='number'?params.endSec:beginSec;
-   const typeInfo=normalizeLeaveType(params.leave_type??params.an_type??params.type);
-
-   if(!date||!reason){
-    return {
-     kind:'leave_apply' as const,
-     success:false,
-     message:'請假資訊不完整，請提供請假日期（YYYY/MM/DD）與請假事由。',
-     details:{date,beginSec,endSec,typeName:typeInfo.name,reason},
-    };
-   }
-
-   const payloadObj=buildLeaveSubmissionPayload({
-    date,
-    date1:typeof params.date1==='string'?params.date1:date,
-    begin_sec:beginSec,
-    end_sec:endSec,
-    an_type:typeInfo.code,
-    reason,
-    consecutive:typeof params.consecutive==='number'?params.consecutive:1,
-   });
-
-   const formBody=new URLSearchParams(payloadObj);
-   const response=await client.fetch(SCHOOL.absenceNoteCreate,signal,formBody,{referer:SCHOOL.absenceNotes});
-   const html=schoolHtml(response.body,response.contentType);
-   if(/請先登入|\/student\/Login.aspx/i.test(html))throw new SchoolError('SCHOOL_SESSION_EXPIRED');
-
-   return {
-    kind:'leave_apply' as const,
-    success:response.status>=200&&response.status<400,
-    message:'請假申請單已成功送出。',
-    details:{date,beginSec,endSec,typeName:typeInfo.name,reason},
-   };
-  }
+  if(action==='leave_apply')return {kind:'leave_apply' as const,success:false,message:'請先取得請假預覽，再於下一則訊息確認。',details:{date:'',beginSec:0,endSec:0,typeName:'',reason:''}};
 
   if(action==='send_mail'){
    const to=typeof params.to==='string'?params.to:typeof params.recipient==='string'?params.recipient:'';

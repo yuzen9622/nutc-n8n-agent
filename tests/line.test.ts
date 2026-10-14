@@ -82,7 +82,7 @@ test('HTTP ingress verifies raw signature before JSON and waits for durable acce
   const {lineRouter}=await import('../apps/gateway/src/modules/line/line.router.js');
   let accepted=0,fail=false;
   const service=new LineService({accept:async () => {if(fail) throw Error('private database detail'); accepted++;},identity:async () => ({sessionKey:'unused'})},{verifyIdentity:async () => user});
-  const server=createServer(lineRouter(new LineController(service,'secret',user)));
+  const server=createServer(lineRouter(new LineController(service,'secret')));
   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));
   const address=server.address();assert(address && typeof address==='object');
@@ -95,9 +95,9 @@ test('HTTP ingress verifies raw signature before JSON and waits for durable acce
   fail=true;
   const failure=await fetch(url,{method:'POST',headers,body});
   assert.equal(failure.status,503);assert.deepEqual(await failure.json(),{error:'SERVICE_UNAVAILABLE'});
-  const wrong=JSON.stringify({destination:`U${'b'.repeat(32)}`,events:[]});
-  const denied=await fetch(url,{method:'POST',body:wrong,headers:{'x-line-signature':createHmac('sha256','secret').update(wrong).digest('base64')}});
-  assert.equal(denied.status,403);
+  const otherBot=JSON.stringify({destination:`U${'b'.repeat(32)}`,events:[]});
+  const acceptedWithoutLocalBinding=await fetch(url,{method:'POST',body:otherBot,headers:{'x-line-signature':createHmac('sha256','secret').update(otherBot).digest('base64')}});
+  assert.equal(acceptedWithoutLocalBinding.status,200);
 });
 
 test('signed fresh one-to-one follow registers without restoring revocation; stale/group follow denied; unfollow revokes',async()=>{

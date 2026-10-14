@@ -3,7 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 
 export const MAX_INPUT_BYTES=64*1024;
-const workflowIds=['campusNativeAgentLive','campusKnowledgeIngest','campusGoogleSearch'];
+const workflowIds=['campusNativeAgentLive','campusKnowledgeIngest'];
 const targets=[
   {id:'campus-agent-postgres',name:'Campus Agent Postgres',type:'postgres'},
   {id:'campus-live-service',name:'Campus live service',type:'httpHeaderAuth'},
@@ -24,7 +24,7 @@ export function setupPlan(input,workflows){
       if(!exactKeys(d,['host','port','database','user','password','ssl'])||d.host!=='postgres'||d.port!==5432||d.database!=='campus_agent'||d.user!=='campus_agent'||d.ssl!=='disable'||typeof d.password!=='string'||!d.password.length)throw new Error('SETUP_INVALID_INPUT');
     }else if(!exactKeys(d,['name','value'])||d.name!==(target.id==='campus-live-service'?'X-Campus-Service':'X-Campus-Webhook')||typeof d.value!=='string'||!/^[a-f0-9]{64}$/.test(d.value))throw new Error('SETUP_INVALID_INPUT');
   }
-  if(!Array.isArray(workflows)||workflows.length!==3||workflowIds.some(id=>!workflows.some(w=>w?.id===id)))throw new Error('SETUP_INVALID_WORKFLOWS');
+  if(!Array.isArray(workflows)||workflows.length!==2||workflowIds.some(id=>!workflows.some(w=>w?.id===id)))throw new Error('SETUP_INVALID_WORKFLOWS');
   for(const workflow of workflows){
     if(workflow.active!==false||!Array.isArray(workflow.nodes)||!workflow.connections||typeof workflow.connections!=='object')throw new Error('SETUP_INVALID_WORKFLOWS');
     for(const node of workflow.nodes){
@@ -54,7 +54,7 @@ export async function setupN8n({client,loadWorkflows,runCli,input,log=console.lo
     const commands=setupPlan(input,await loadWorkflows());
     for(const command of commands){
       try{await runCli(command);}catch{throw new Error(`SETUP_CLI_${command.args[0].replace(':','_').toUpperCase()}_FAILED`);}
-      log(command.args[0]==='import:credentials'?'n8n setup: internal credentials imported.':'n8n setup: three workflows imported inactive; configure Google credentials and publish in the editor.');
+      log(command.args[0]==='import:credentials'?'n8n setup: internal credentials imported.':'n8n setup: two workflows imported inactive; configure Google credentials and publish in the editor.');
     }
     return 'initialized';
   }finally{
